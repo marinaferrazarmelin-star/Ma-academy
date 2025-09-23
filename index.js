@@ -287,4 +287,54 @@ app.get("/classes/:id/report", auth, mustTeacher, async (req, res) => {
     return res.json({ class: cls[0], simuladoId: simId, average: 0, byArea: [], byContent: [], students: [] });
   }
 
-  const attempts = await
+  const attempts = await query(
+    "SELECT * FROM attempts WHERE simulado_id=$1 AND user_id = ANY($2::uuid[])",
+    [simId, studIds]
+  );
+
+  const avg = attempts.length
+    ? attempts.reduce((s, a) => s + a.score, 0) / attempts.length
+    : 0;
+
+  const agg = (arr, key) => {
+    const map = {};
+    arr.forEach((a) =>
+      (a[key] || []).forEach((x) => {
+        const k = key === "byArea" ? x.area : x.content;
+        if (!map[k]) map[k] = { total: 0, correct: 0 };
+        map[k].total += x.total;
+        map[k].correct += x.correct;
+      })
+    );
+    return Object.entries(map).map(([k, v]) => ({
+      [key === "byArea" ? "area" : "content"]: k,
+      total: v.total,
+      correct: v.correct,
+      pct: Math.round((v.correct / v.total) * 100 || 0)
+    }));
+  };
+
+  const byArea = agg(attempts, "byArea");
+  const byContent = agg(attempts, "byContent");
+  const students = attempts.map((a) => ({
+    student: a.user_id,
+    score: Math.round(a.score)
+  }));
+
+  res.json({
+    class: cls[0],
+    simuladoId: simId,
+    average: Math.round(avg),
+    byArea,
+    byContent,
+    students
+  });
+});
+
+// ----------------- START -----------------
+(async () => {
+  await runMigrations();
+  app.listen(PORT, () =>
+    console.log(`✔ Server rodando em http://localhost:${PORT}`)
+  );
+})();
