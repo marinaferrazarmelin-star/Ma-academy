@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GABARITA — Simulados ENEM</title>
+  <link rel="stylesheet" href="/style.css">
+
+  <!-- Chart.js + datalabels (precisam vir antes do seu script) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+</head>
+<body>
+  <!-- NAVBAR -->
+  <nav class="nav">
+    <div class="nav__brand">
+      <span class="logo-target">🎯</span> <span class="brand">GABARITA</span>
+    </div>
+    <button class="nav__toggle" id="navToggle">☰</button>
+    <ul class="nav__links" id="navLinks">
+      <li><a href="#" data-route="home" class="active">Início</a></li>
+      <li><a href="#" data-route="simulados">Simulados</a></li>
+      <li><a href="#" data-route="banco">Banco de Questões</a></li>
+      <li><a href="#" data-route="progresso">Progresso</a></li>
+      <li><a href="#" data-route="classes">Classes</a></li>
+      <li><a href="#" data-route="register">Registrar-se</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <!-- HOME -->
+    <section id="view-home" class="view show">
+      <section class="hero">
+        <h1>A sua plataforma <b>GRATUITA</b> de simulados e estatísticas</h1>
+        <p class="hero__subtitle">Pratique, acompanhe seu progresso e gabarite suas provas.</p>
+        <div class="hero__actions">
+          <a class="btn btn-white blue-text" data-route="banco" href="#">Crie Simulados Próprios</a>
+          <a class="btn btn-white blue-text" data-route="simulados" href="#">Simulados Oficiais</a>
+          <a class="btn btn-white blue-text" data-route="banco" href="#">Banco de Questões</a>
+        </div>
+      </section>
+
+      <section class="features card">
+        <h2>Recursos</h2>
+        <div class="features__grid three-cols">
+          <div class="feature"><span>✏️</span> Crie Simulados Próprios</div>
+          <div class="feature"><span>📄</span> Simulados Oficiais</div>
+          <div class="feature"><span>⏱️</span> Timer da Prova</div>
+          <div class="feature"><span>⚡</span> Feedback Imediato</div>
+          <div class="feature"><span>📈</span> Histórico de Desempenho</div>
+          <div class="feature"><span>🔁</span> Revisão Direcionada</div>
+          <div class="feature"><span>📊</span> Acompanhe seu Progresso</div>
+          <div class="feature"><span>🏆</span> Ranking Direcionado</div>
+          <div class="feature"><span>✨</span> Novo recurso em breve</div>
+        </div>
+      </section>
+    </section>
+
+    <!-- SIMULADOS -->
+    <section id="view-simulados" class="view">
+      <div class="container">
+        <h2>Simulados ENEM</h2>
+        <p class="muted">Escolha um simulado abaixo.</p>
+        <div id="listaSimulados" class="list"></div>
+        <div id="simuladoQuestoes" class="card" style="display:none;"></div>
+        <section id="resultado-geral" class="card" style="display:none;"></section>
+        <section id="resultado-materias" class="card" style="display:none;"></section>
+        <section id="resultado-conteudos" class="card" style="display:none;"></section>
+      </div>
+    </section>
+
+    <!-- BANCO -->
+    <section id="view-banco" class="view">
+      <div class="container"><h2>Banco de Questões</h2><p class="muted">Em breve: crie seu próprio simulado.</p></div>
+    </section>
+
+    <!-- PROGRESSO -->
+    <section id="view-progresso" class="view">
+      <div class="container">
+        <h2>Progresso</h2>
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="historico">Histórico</button>
+          <button class="tab-btn" data-tab="graficos">Gráficos</button>
+        </div>
+        <div id="tab-historico" class="tab-content show">
+          <div id="historicoList" class="list"></div>
+        </div>
+        <div id="tab-graficos" class="tab-content">
+          <p class="muted">Em breve: gráficos de desempenho.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLASSES -->
+    <section id="view-classes" class="view">
+      <div class="container"><h2>Classes</h2><p class="muted">Área do professor e simulados da turma.</p></div>
+    </section>
+
+    <!-- REGISTER / LOGIN -->
+    <section id="view-register" class="view">
+      <div class="container card">
+        <h2>Cadastre-se ou faça login</h2>
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="cadastro">Cadastro</button>
+          <button class="tab-btn" data-tab="login">Login</button>
+        </div>
+
+        <div id="tab-cadastro" class="tab-content show">
+          <form id="formRegister">
+            <label>Nome:<input type="text" name="name" required></label>
+            <label>Email:<input type="email" name="email" required></label>
+            <label>Senha:<input type="password" name="password" required></label>
+            <label>Tipo:
+              <select name="role" required>
+                <option value="student">Estudante</option>
+                <option value="teacher">Professor</option>
+              </select>
+            </label>
+            <button type="submit" class="btn">Cadastrar</button>
+          </form>
+        </div>
+
+        <div id="tab-login" class="tab-content">
+          <form id="formLogin">
+            <label>Email:<input type="email" name="email" required></label>
+            <label>Senha:<input type="password" name="password" required></label>
+            <button type="submit" class="btn">Entrar</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">© 2025 GABARITA</footer>
+  <!-- IMPORTANTE: sem barra antes de script.js -->
+  <script src="script.js"></script>
+</body>
+</html>
