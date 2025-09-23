@@ -2,12 +2,12 @@
 let TOKEN = null;
 let ME = null;
 
-let SIMULADOS_CACHE = [];        // vem do backend /simulados
+let SIMULADOS_CACHE = [];        // [{id,name,total}]
 let CURRENT_SIM = null;
 let CURRENT_QUESTIONS = [];
 let ANSWERS = {};
 
-let RESULT = null;               // resposta do backend ao submeter
+let RESULT = null;               // {score,...}
 let BY_AREA = [];                // [{area,total,correct,pct}]
 let BY_CONTENT = [];             // [{content,total,correct,pct}]
 let CONTENT_AREA = {};           // {content: area}
@@ -17,23 +17,15 @@ const charts = { geral:null, subjects:{}, conteudos:null };
 /*************** UTILS ***************/
 const $ = (sel)=> document.querySelector(sel);
 const $$ = (sel)=> document.querySelectorAll(sel);
-function show(id){ const el=document.getElementById(id); if(el) el.classList.add('show'); }
-function hide(id){ const el=document.getElementById(id); if(el) el.classList.remove('show'); }
+function show(id){ const el=document.getElementById(id); if(el) el.style.display='block'; }
+function hide(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
+function setView(id){ $$('.view').forEach(v=>v.classList.remove('show')); const el=$('#view-'+id); if(el) el.classList.add('show'); }
 function pctColor(p){ if(p>=75) return '#14532D'; if(p>=50) return '#22C55E'; if(p>=25) return '#F59E0B'; return '#EF4444'; }
 function destroyAll(){
   if (charts.geral){ charts.geral.destroy(); charts.geral=null; }
   Object.values(charts.subjects).forEach(c=>c && c.destroy());
   charts.subjects = {};
   if (charts.conteudos){ charts.conteudos.destroy(); charts.conteudos=null; }
-}
-function setActiveRoute(route){
-  $$('#navLinks a').forEach(a => a.classList.toggle('active', a.dataset.route===route));
-  const views = ['home','simulados','banco','progresso','classes','register'];
-  views.forEach(v => {
-    const el = document.getElementById('view-'+v);
-    if(!el) return;
-    if(v===route) el.classList.add('show'); else el.classList.remove('show');
-  });
 }
 function authHeaders(){
   return TOKEN ? { 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json' } : { 'Content-Type':'application/json' };
@@ -44,13 +36,10 @@ function formatDate(iso){
     return d.toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' });
   }catch{ return iso || ''; }
 }
-
-/*************** ROUTE GUARD ***************/
 function requireLogin(route){
   const restricted = ["simulados","banco","progresso","classes"];
   if(!TOKEN && restricted.includes(route)){
-    setActiveRoute("register");
-    // ativa aba de login por padrão
+    setView("register");
     switchToTab($('#view-register'), 'login');
     return false;
   }
@@ -64,14 +53,16 @@ $$('#navLinks a').forEach(a=>{
     e.preventDefault();
     const route = a.dataset.route || 'home';
     if(requireLogin(route)){
-      setActiveRoute(route);
+      $$('#navLinks a').forEach(x => x.classList.toggle('active', x===a));
+      setView(route);
       if(route==='simulados'){ renderListaSimulados(); }
       if(route==='progresso'){ openProgresso(); }
+      if(route==='classes'){ openClasses(); }
     }
   });
 });
 
-/*************** TABS (Progresso/Registro) ***************/
+/*************** TABS ***************/
 document.addEventListener('click', (e)=>{
   if(e.target.classList.contains('tab-btn')){
     const wrap = e.target.closest('.container') || e.target.closest('.card') || document;
@@ -94,7 +85,7 @@ function switchToTab(scopeEl, tabName){
   });
 }
 
-/*************** AUTH FORMS ***************/
+/*************** AUTH ***************/
 function saveToken(t){ TOKEN = t; localStorage.setItem('token', t || ''); }
 function loadToken(){ const t = localStorage.getItem('token'); if(t){ TOKEN=t; } }
 
@@ -111,85 +102,69 @@ async function fetchMe(){
   }
 }
 
-async function handleRegister(){
-  const form = $('#formRegister');
-  if(!form) return;
-  form.addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    form.querySelector('.form-error')?.remove();
-    form.querySelector('.form-success')?.remove();
+function attachRegisterLogin(){
+  const formR = $('#formRegister');
+  if (formR){
+    formR.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      formR.querySelector('.form-error')?.remove();
+      formR.querySelector('.form-success')?.remove();
+      const fd = new FormData(formR);
+      const payload = {
+        name: fd.get('name')?.toString().trim(),
+        email: fd.get('email')?.toString().trim(),
+        password: fd.get('password')?.toString(),
+        role: fd.get('role')?.toString()
+      };
+      try{
+        const r = await fetch('/auth/register', {
+          method:'POST', headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        if(!r.ok) throw new Error(data.error || 'Erro no cadastro');
+        saveToken(data.token); ME = data.user;
+        const ok = document.createElement('div'); ok.className='form-success';
+        ok.textContent='Cadastro concluído. Você já está logado!'; formR.appendChild(ok);
+        setView('home');
+      }catch(err){
+        const div = document.createElement('div');
+        div.className='form-error'; div.textContent = err.message || 'Falha ao cadastrar';
+        formR.appendChild(div);
+      }
+    });
+  }
 
-    const fd = new FormData(form);
-    const payload = {
-      name: fd.get('name')?.toString().trim(),
-      email: fd.get('email')?.toString().trim(),
-      password: fd.get('password')?.toString(),
-      role: fd.get('role')?.toString()
-    };
-    try{
-      const r = await fetch('/auth/register', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await r.json();
-      if(!r.ok) throw new Error(data.error || 'Erro no cadastro');
-      saveToken(data.token);
-      ME = data.user;
-      // feedback e direcionamento
-      const ok = document.createElement('div');
-      ok.className = 'form-success';
-      ok.textContent = 'Cadastro concluído. Você já está logado!';
-      form.appendChild(ok);
-      setActiveRoute('home');
-    }catch(err){
-      const div = document.createElement('div');
-      div.className = 'form-error';
-      div.textContent = err.message || 'Falha ao cadastrar';
-      form.appendChild(div);
-    }
-  });
+  const formL = $('#formLogin');
+  if (formL){
+    formL.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      formL.querySelector('.form-error')?.remove();
+      const fd = new FormData(formL);
+      const payload = { email: fd.get('email')?.toString().trim(), password: fd.get('password')?.toString() };
+      try{
+        const r = await fetch('/auth/login', {
+          method:'POST', headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        if(!r.ok) throw new Error(data.error || 'Erro no login');
+        saveToken(data.token); ME = data.user;
+        setView('home');
+      }catch(err){
+        const div = document.createElement('div');
+        div.className='form-error'; div.textContent = err.message || 'Falha ao entrar';
+        formL.appendChild(div);
+      }
+    });
+  }
 }
 
-async function handleLogin(){
-  const form = $('#formLogin');
-  if(!form) return;
-  form.addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    form.querySelector('.form-error')?.remove();
-
-    const fd = new FormData(form);
-    const payload = {
-      email: fd.get('email')?.toString().trim(),
-      password: fd.get('password')?.toString()
-    };
-    try{
-      const r = await fetch('/auth/login', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await r.json();
-      if(!r.ok) throw new Error(data.error || 'Erro no login');
-      saveToken(data.token);
-      ME = data.user;
-      setActiveRoute('home');
-    }catch(err){
-      const div = document.createElement('div');
-      div.className = 'form-error';
-      div.textContent = err.message || 'Falha ao entrar';
-      form.appendChild(div);
-    }
-  });
-}
-
-/*************** HOME (nada dinâmico por enquanto) ***************/
-
-/*************** SIMULADOS: LISTA + ESTADO ***************/
+/*************** SIMULADOS ***************/
 async function fetchSimulados(){
   const r = await fetch('/simulados', { headers: authHeaders() });
   if(!r.ok) throw new Error('Falha ao obter simulados');
-  SIMULADOS_CACHE = await r.json(); // [{id,name,total}]
+  SIMULADOS_CACHE = await r.json();
 }
 function getStatus(simId){
   const doneKey = `sim-done-${ME?.id || 'anon'}`;
@@ -202,9 +177,10 @@ function setStatusDone(simId){
   if(!done.includes(simId)){ done.push(simId); localStorage.setItem(doneKey, JSON.stringify(done)); }
 }
 async function renderListaSimulados(){
+  const wrap = $('#listaSimulados');
+  if(!wrap) return;
+  wrap.innerHTML = `<div class="muted">Carregando...</div>`;
   try{
-    const wrap = $('#listaSimulados');
-    if(!wrap) return;
     await fetchSimulados();
     wrap.innerHTML = SIMULADOS_CACHE.map(s=>{
       const status = getStatus(s.id);
@@ -214,8 +190,8 @@ async function renderListaSimulados(){
         <div class="sim-row">
           <div class="sim-row__left">
             <div class="status"><span class="dot ${dotClass}"></span> ${label}</div>
-            <b>${s.name || s.title || ('Simulado '+s.id)}</b>
-            <span class="muted">• ${s.total || 0} questões</span>
+            <b>${s.name}</b>
+            <span class="muted">• ${s.total} questões</span>
           </div>
           <div class="sim-row__right">
             <button class="btn small" data-action="start" data-id="${s.id}">Iniciar</button>
@@ -223,22 +199,16 @@ async function renderListaSimulados(){
         </div>
       `;
     }).join('');
-
-    // delegação de eventos
+    // eventos
     wrap.querySelectorAll('button[data-action="start"]').forEach(btn=>{
       btn.addEventListener('click', ()=> startSimulado(Number(btn.dataset.id)));
     });
-
-    // prepara seções de resultado
     setupResultadoSections();
   }catch(err){
-    console.error(err);
+    wrap.innerHTML = `<div class="form-error">${err.message}</div>`;
   }
 }
-
-/*************** INICIAR SIMULADO ***************/
 function setupResultadoSections(){
-  // preenche estrutura base das três telas (caso não exista)
   const g = $('#resultado-geral');
   if(g && !g.innerHTML.trim()){
     g.innerHTML = `
@@ -272,30 +242,21 @@ function setupResultadoSections(){
     c.innerHTML = `
       <h3>Resultado — Por Conteúdo</h3>
       <div class="row" style="margin-bottom:8px">
-        <label>Matéria:&nbsp;
-          <select id="selectArea"></select>
-        </label>
+        <label>Matéria:&nbsp;<select id="selectArea"></select></label>
       </div>
-      <div class="viz-wide" style="height:460px">
-        <canvas id="chartConteudos"></canvas>
-      </div>
+      <div class="viz-wide" style="height:460px"><canvas id="chartConteudos"></canvas></div>
       <div class="row end" style="margin-top:10px">
         <button class="btn ghost" id="btnBackMaterias">← Voltar por Matéria</button>
       </div>
     `;
   }
 }
-
 async function startSimulado(id){
   CURRENT_SIM = id; ANSWERS = {};
-  // backend
   const r = await fetch(`/simulado/${id}`, { headers: authHeaders() });
-  if(!r.ok) throw new Error('Falha ao obter questões');
-  CURRENT_QUESTIONS = await r.json(); // [{id, area, content, text, options}]
-
-  // mapeia conteúdo->área para filtros depois
+  if(!r.ok) { alert('Falha ao obter questões'); return; }
+  CURRENT_QUESTIONS = await r.json();
   CONTENT_AREA = {}; CURRENT_QUESTIONS.forEach(q => CONTENT_AREA[q.content]=q.area);
-
   const box = $('#simuladoQuestoes');
   box.style.display = 'block';
   box.innerHTML = `<h3>${(SIMULADOS_CACHE.find(s=>s.id===id)?.name) || 'Simulado'}</h3>` +
@@ -309,113 +270,59 @@ async function startSimulado(id){
       </div>
     `).join('') +
     `<div class="row end"><button class="btn" id="btnSubmit">Finalizar simulado</button></div>`;
-
-  // esconde resultados enquanto responde
-  ['resultado-geral','resultado-materias','resultado-conteudos'].forEach(id=>$('#'+id).style.display='none');
-
+  hide('resultado-geral'); hide('resultado-materias'); hide('resultado-conteudos');
   $('#btnSubmit').addEventListener('click', submitSimulado);
 }
-
-/*************** SUBMETER E CALCULAR RESULTADO ***************/
 async function submitSimulado(){
-  // validação simples: avisa se há muitas em branco
   const total = CURRENT_QUESTIONS.length;
   const answered = Object.keys(ANSWERS).length;
   if(answered < total){
     const conf = confirm(`Você deixou ${total - answered} questão(ões) em branco. Deseja enviar mesmo assim?`);
     if(!conf) return;
   }
-
-  // backend real: envia respostas, recebe score + breakdown e salva histórico
   const r = await fetch(`/simulado/${CURRENT_SIM}/submit`, {
-    method:'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ answers: ANSWERS })
+    method:'POST', headers: authHeaders(), body: JSON.stringify({ answers: ANSWERS })
   });
   const data = await r.json();
-  if(!r.ok) { alert(data.error || 'Falha ao enviar'); return; }
-
+  if(!r.ok){ alert(data.error || 'Falha ao enviar'); return; }
   RESULT = { score: Math.round(data.score) };
   BY_AREA = data.byArea || [];
   BY_CONTENT = data.byContent || [];
-
-  // marca como feito (por usuário)
   setStatusDone(CURRENT_SIM);
-
-  // mostra tela geral
   $('#simuladoQuestoes').style.display='none';
   renderTelaGeral();
 }
-
-/*************** RESULTADOS — TELA 1: GERAL ***************/
 function renderTelaGeral(){
-  destroyAll();
-  const sec = $('#resultado-geral');
-  sec.style.display='block';
-  $('#resultado-materias').style.display='none';
-  $('#resultado-conteudos').style.display='none';
-
+  destroyAll(); show('resultado-geral'); hide('resultado-materias'); hide('resultado-conteudos');
   const ctx = $('#chartGeral').getContext('2d');
   charts.geral = new Chart(ctx,{
     type:'doughnut',
-    data:{
-      labels:['Acertos','Erros'],
-      datasets:[{ data:[RESULT.score, 100-RESULT.score], backgroundColor:[pctColor(RESULT.score),'#E5E7EB'] }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false, cutout:'70%',
-      plugins:{
-        legend:{display:false},
-        datalabels:{
-          display:(c)=>c.dataIndex===0,
-          formatter:()=>`${RESULT.score}%`,
-          color:'#111', font:{weight:'bold',size:20}
-        }
-      }
-    },
-    plugins:[ChartDataLabels]
+    data:{ labels:['Acertos','Erros'], datasets:[{ data:[RESULT.score, 100-RESULT.score], backgroundColor:[pctColor(RESULT.score),'#E5E7EB'] }]},
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'70%',
+      plugins:{ legend:{display:false}, datalabels:{ display:(c)=>c.dataIndex===0, formatter:()=>`${RESULT.score}%`, color:'#111', font:{weight:'bold',size:20} } }
+    }, plugins:[ChartDataLabels]
   });
-
-  // navegação
   $('#btnToMaterias').onclick = renderTelaMaterias;
 }
-
-/*************** RESULTADOS — TELA 2: POR MATÉRIA ***************/
 function renderTelaMaterias(){
-  destroyAll();
-  $('#resultado-geral').style.display='none';
-  const sec = $('#resultado-materias');
-  sec.style.display='block';
-  $('#resultado-conteudos').style.display='none';
-
-  const grid = $('#gridMaterias');
-  grid.innerHTML = '';
+  destroyAll(); hide('resultado-geral'); show('resultado-materias'); hide('resultado-conteudos');
+  const grid = $('#gridMaterias'); grid.innerHTML = '';
   BY_AREA.forEach(a=>{
     const id = `mat-${a.area.toLowerCase().replace(/\s+/g,'-')}`;
     const card = document.createElement('div');
     card.className='subject-card';
     card.innerHTML = `<h5>${a.area}</h5><div style="height:240px"><canvas id="${id}"></canvas></div>`;
     grid.appendChild(card);
-
     const ctx = $('#'+id).getContext('2d');
     charts.subjects[id] = new Chart(ctx,{
       type:'doughnut',
       data:{ labels:['Acertos','Erros'], datasets:[{ data:[a.pct, 100-a.pct], backgroundColor:[pctColor(a.pct),'#E5E7EB'] }]},
-      options:{
-        responsive:true, maintainAspectRatio:false, cutout:'70%',
-        plugins:{
-          legend:{display:false},
-          datalabels:{ display:(c)=>c.dataIndex===0, formatter:()=>`${a.pct}%`, color:'#111', font:{weight:'bold',size:16} }
-        },
-        onClick: ()=> {
-          renderTelaConteudos(a.area);
-          $('#selectArea').value = a.area;
-        }
-      },
-      plugins:[ChartDataLabels]
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'70%',
+        plugins:{ legend:{display:false}, datalabels:{ display:(c)=>c.dataIndex===0, formatter:()=>`${a.pct}%`, color:'#111', font:{weight:'bold',size:16} } },
+        onClick: ()=> { renderTelaConteudos(a.area); $('#selectArea').value = a.area; }
+      }, plugins:[ChartDataLabels]
     });
   });
-
   $('#btnBackGeral').onclick = renderTelaGeral;
   $('#btnToConteudos').onclick = ()=>{
     const firstArea = BY_AREA[0]?.area || '';
@@ -423,52 +330,33 @@ function renderTelaMaterias(){
     if(firstArea) $('#selectArea').value = firstArea;
   };
 }
-
-/*************** RESULTADOS — TELA 3: POR CONTEÚDO ***************/
 function renderTelaConteudos(area){
-  destroyAll();
-  $('#resultado-geral').style.display='none';
-  $('#resultado-materias').style.display='none';
-  const sec = $('#resultado-conteudos');
-  sec.style.display='block';
-
-  // popula seletor de matéria
+  destroyAll(); hide('resultado-geral'); hide('resultado-materias'); show('resultado-conteudos');
   const sel = $('#selectArea');
   sel.innerHTML = BY_AREA.map(a=>`<option value="${a.area}">${a.area}</option>`).join('');
   if(area) sel.value = area;
   sel.onchange = ()=> renderTelaConteudos(sel.value);
-
-  // filtra conteúdos da área selecionada
   const rows = BY_CONTENT.filter(c => CONTENT_AREA[c.content] === (area || sel.value));
   const labels = rows.map(r=>r.content);
   const data = rows.map(r=>r.pct);
-
   const ctx = $('#chartConteudos').getContext('2d');
   charts.conteudos = new Chart(ctx,{
     type:'bar',
     data:{ labels, datasets:[{ data, backgroundColor:(c)=> pctColor(c.raw) }]},
-    options:{
-      responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
       scales:{ x:{ min:0,max:100,ticks:{callback:(v)=>v+'%'} } },
-      plugins:{
-        legend:{display:false},
-        datalabels:{ display:true, align:'end', anchor:'end', formatter:(v)=>v+'%', color:'#111', font:{weight:'bold'} }
-      }
-    },
-    plugins:[ChartDataLabels]
+      plugins:{ legend:{display:false}, datalabels:{ display:true, align:'end', anchor:'end', formatter:(v)=>v+'%', color:'#111', font:{weight:'bold'} } }
+    }, plugins:[ChartDataLabels]
   });
-
   $('#btnBackMaterias').onclick = renderTelaMaterias;
 }
 
 /*************** PROGRESSO ***************/
 async function openProgresso(){
-  // garantir aba Histórico ativa e carregar
   const view = $('#view-progresso');
   switchToTab(view, 'historico');
   await renderHistorico();
 }
-
 async function renderHistorico(){
   const wrap = $('#historicoList');
   if(!wrap) return;
@@ -477,12 +365,7 @@ async function renderHistorico(){
     const r = await fetch('/me/history', { headers: authHeaders() });
     const arr = await r.json();
     if(!r.ok) throw new Error(arr.error || 'Falha ao obter histórico');
-
-    if(!arr.length){
-      wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`;
-      return;
-    }
-
+    if(!arr.length){ wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`; return; }
     wrap.innerHTML = arr.map(a=>{
       const statusDot = a.score>=75 ? 'done' : 'pending';
       const simTitle = (SIMULADOS_CACHE.find(s=>String(s.id)===String(a.simuladoId))?.name) || `Simulado ${a.simuladoId}`;
@@ -504,20 +387,238 @@ async function renderHistorico(){
   }
 }
 
+/*************** CLASSES ***************/
+async function openClasses(){
+  if(ME?.role !== 'teacher'){
+    $('#view-classes').innerHTML = `<div class="container"><h2>Classes</h2><p class="muted">Apenas professores têm acesso a esta área.</p></div>`;
+    return;
+  }
+  // Prepara simulado selector (aba Turma)
+  await ensureSimSelects();
+  // Liga eventos
+  attachTurmaUI();
+  attachAlunoUI();
+  // Carrega lista de turmas
+  await loadTurmas();
+}
+
+async function ensureSimSelects(){
+  // carrega simulados para selectors
+  if (!SIMULADOS_CACHE.length){
+    try { await fetchSimulados(); } catch {}
+  }
+  const turmaSel = $('#turmaSimSelect');
+  if (turmaSel){
+    turmaSel.innerHTML = SIMULADOS_CACHE.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  }
+}
+
+function attachTurmaUI(){
+  const form = $('#formNovaTurma');
+  if (form && !form.dataset.bound){
+    form.dataset.bound = '1';
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const fd = new FormData(form);
+      const name = (fd.get('name')||'').toString().trim();
+      if(!name) return;
+      const r = await fetch('/classes', {
+        method:'POST', headers: authHeaders(), body: JSON.stringify({ name })
+      });
+      const data = await r.json();
+      if(!r.ok){ alert(data.error || 'Erro ao criar turma'); return; }
+      form.reset();
+      await loadTurmas();
+    });
+  }
+
+  const btnAdd = $('#btnAddAluno');
+  if (btnAdd && !btnAdd.dataset.bound){
+    btnAdd.dataset.bound = '1';
+    btnAdd.addEventListener('click', async ()=>{
+      const email = ($('#alunoEmail')?.value || '').trim();
+      const classId = btnAdd.dataset.classId;
+      if(!email || !classId){ alert('Selecione uma turma e informe o email'); return; }
+      const r = await fetch(`/classes/${classId}/add-student`, {
+        method:'POST', headers: authHeaders(), body: JSON.stringify({ studentEmail: email })
+      });
+      const data = await r.json();
+      if(!r.ok){ alert(data.error || 'Erro ao adicionar aluno'); return; }
+      $('#alunoEmail').value = '';
+      await openTurmaDetalhe(classId);
+    });
+  }
+
+  const btnRep = $('#btnLoadReport');
+  if (btnRep && !btnRep.dataset.bound){
+    btnRep.dataset.bound = '1';
+    btnRep.addEventListener('click', async ()=>{
+      const classId = btnRep.dataset.classId;
+      const simId = Number($('#turmaSimSelect')?.value || 1);
+      if(!classId){ alert('Selecione uma turma'); return; }
+      await loadTurmaReport(classId, simId);
+    });
+  }
+}
+
+function attachAlunoUI(){
+  const alunoTurmaSelect = $('#alunoTurmaSelect');
+  if (alunoTurmaSelect && !alunoTurmaSelect.dataset.bound){
+    alunoTurmaSelect.dataset.bound='1';
+    alunoTurmaSelect.addEventListener('change', async ()=>{
+      const cid = alunoTurmaSelect.value;
+      await loadAlunosDaTurma(cid);
+    });
+  }
+}
+
+async function loadTurmas(){
+  const wrap = $('#listaTurmas');
+  if(!wrap) return;
+  wrap.innerHTML = `<div class="muted">Carregando...</div>`;
+  const r = await fetch('/classes', { headers: authHeaders() });
+  const data = await r.json();
+  if(!r.ok){ wrap.innerHTML = `<div class="form-error">${data.error || 'Erro'}</div>`; return; }
+  if(!data.length){ wrap.innerHTML = `<div class="card"><b>Nenhuma turma criada ainda.</b></div>`; return; }
+
+  // Preencher select da aba Aluno
+  const sel = $('#alunoTurmaSelect');
+  if(sel){ sel.innerHTML = data.map(t=>`<option value="${t.id}">${t.name}</option>`).join(''); }
+
+  wrap.innerHTML = data.map(t=>`
+    <div class="sim-row">
+      <div class="sim-row__left">
+        <b>${t.name}</b>
+        <span class="muted">• id ${t.id.slice(0,8)}...</span>
+      </div>
+      <div class="sim-row__right">
+        <button class="btn small" data-open="${t.id}">Abrir</button>
+      </div>
+    </div>
+  `).join('');
+
+  wrap.querySelectorAll('button[data-open]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openTurmaDetalhe(btn.dataset.open));
+  });
+
+  // carrega alunos da primeira turma na aba Aluno
+  if (sel && data[0]) {
+    sel.value = data[0].id;
+    await loadAlunosDaTurma(data[0].id);
+  }
+}
+
+async function openTurmaDetalhe(classId){
+  const r = await fetch(`/classes/${classId}`, { headers: authHeaders() });
+  const data = await r.json();
+  if(!r.ok){ alert(data.error || 'Erro ao abrir turma'); return; }
+
+  $('#turmaNome').textContent = data.name;
+  const alunos = data.students || [];
+  $('#turmaAlunos').innerHTML = alunos.length
+    ? alunos.map(a=>`<div class="sim-row"><div class="sim-row__left"><b>${a.name}</b><span class="muted">• ${a.email}</span></div></div>`).join('')
+    : `<div class="card">Nenhum aluno ainda.</div>`;
+
+  // Botões vinculados a turma corrente
+  $('#btnAddAluno').dataset.classId = classId;
+  $('#btnLoadReport').dataset.classId = classId;
+
+  show('turmaDetalhe');
+  // limpa relatório até usuário clicar "Carregar"
+  $('#turmaReport').innerHTML = `<div class="muted">Selecione um simulado e clique em "Carregar".</div>`;
+}
+
+async function loadTurmaReport(classId, simId){
+  const r = await fetch(`/classes/${classId}/report?simulado=${simId}`, { headers: authHeaders() });
+  const data = await r.json();
+  if(!r.ok){ alert(data.error || 'Erro ao carregar relatório'); return; }
+
+  const rep = $('#turmaReport');
+  const area = (data.byArea||[]).map(x=>`
+    <div class="rowb"><div>${x.area}</div><div>${x.total}</div><div>${x.correct}</div><div>${x.pct}%</div></div>
+  `).join('') || `<div class="muted">Sem dados ainda.</div>`;
+  const cont = (data.byContent||[]).map(x=>`
+    <div class="rowb"><div>${x.content}</div><div>${x.total}</div><div>${x.correct}</div><div>${x.pct}%</div></div>
+  `).join('') || `<div class="muted">Sem dados ainda.</div>`;
+  const studs = (data.students||[]).map(s=>`
+    <div class="sim-row"><div class="sim-row__left"><b>${s.student}</b></div><div class="sim-row__right"><span class="badge">${s.score}%</span></div></div>
+  `).join('') || `<div class="muted">Nenhum aluno avaliável ainda.</div>`;
+
+  rep.innerHTML = `
+    <h5>Média da turma: ${data.average || 0}%</h5>
+    <div class="two-cols">
+      <div>
+        <div class="table-like">
+          <div class="rowh"><div>Matéria</div><div>Total</div><div>Acertos</div><div>%</div></div>
+          ${area}
+        </div>
+      </div>
+      <div>
+        <div class="table-like">
+          <div class="rowh"><div>Conteúdo</div><div>Total</div><div>Acertos</div><div>%</div></div>
+          ${cont}
+        </div>
+      </div>
+    </div>
+    <h5 style="margin-top:10px;">Alunos</h5>
+    ${studs}
+  `;
+}
+
+async function loadAlunosDaTurma(classId){
+  if(!classId){ $('#listaAlunos').innerHTML = `<div class="muted">Selecione uma turma.</div>`; return; }
+  const r = await fetch(`/classes/${classId}`, { headers: authHeaders() });
+  const data = await r.json();
+  if(!r.ok){ $('#listaAlunos').innerHTML = `<div class="form-error">${data.error || 'Erro'}</div>`; return; }
+  const alunos = data.students || [];
+  const list = $('#listaAlunos');
+  list.innerHTML = alunos.length
+    ? alunos.map(a=>`
+      <div class="sim-row">
+        <div class="sim-row__left"><b>${a.name}</b> <span class="muted">• ${a.email}</span></div>
+        <div class="sim-row__right"><button class="btn small" data-open-stu="${a.id}" data-stuname="${a.name}">Abrir</button></div>
+      </div>
+    `).join('')
+    : `<div class="card">Nenhum aluno nessa turma.</div>`;
+
+  list.querySelectorAll('button[data-open-stu]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openAlunoDetalhe(btn.dataset.openStu, btn.dataset.stuname));
+  });
+}
+
+async function openAlunoDetalhe(studentId, studentName){
+  $('#alunoNome').textContent = studentName || 'Aluno';
+  const cont = $('#alunoHistorico');
+  cont.innerHTML = `<div class="muted">Carregando...</div>`;
+  const r = await fetch(`/me/history?userId=${encodeURIComponent(studentId)}`, { headers: authHeaders() });
+  const arr = await r.json();
+  if(!r.ok){ cont.innerHTML = `<div class="form-error">${arr.error || 'Erro'}</div>`; return; }
+  if(!arr.length){ cont.innerHTML = `<div class="card">Este aluno ainda não fez simulados.</div>`; show('detalheAluno'); return; }
+
+  cont.innerHTML = arr.map(a=>{
+    const simTitle = (SIMULADOS_CACHE.find(s=>String(s.id)===String(a.simuladoId))?.name) || `Simulado ${a.simuladoId}`;
+    return `
+      <div class="sim-row">
+        <div class="sim-row__left">
+          <b>${simTitle}</b><span class="muted">• ${formatDate(a.date)}</span>
+        </div>
+        <div class="sim-row__right">
+          <span class="badge">${Math.round(a.score)}%</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  show('detalheAluno');
+}
+
 /*************** BOOT ***************/
 (async function boot(){
-  // forçar nome certo do arquivo: este é script.js (não script.javascript)
   loadToken();
   if(TOKEN){ await fetchMe(); }
-
-  // listeners de cadastro/login
-  handleRegister();
-  handleLogin();
-
+  attachRegisterLogin();
   // rota inicial
-  setActiveRoute('home');
-
-  // se já estiver logado, pré-carrega lista de simulados (para histórico ficar com títulos)
+  setView('home');
+  // pré-carrega simulados se logado (melhora as labels do histórico)
   if(TOKEN){
     try{ await fetchSimulados(); }catch{}
   }
