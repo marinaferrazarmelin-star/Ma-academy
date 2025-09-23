@@ -590,10 +590,19 @@ async function openAlunoDetalhe(studentId, studentName){
   $('#alunoNome').textContent = studentName || 'Aluno';
   const cont = $('#alunoHistorico');
   cont.innerHTML = `<div class="muted">Carregando...</div>`;
-  const r = await fetch(`/me/history?userId=${encodeURIComponent(studentId)}`, { headers: authHeaders() });
+
+  const r = await fetch(`/users/${encodeURIComponent(studentId)}/history`, { headers: authHeaders() });
   const arr = await r.json();
-  if(!r.ok){ cont.innerHTML = `<div class="form-error">${arr.error || 'Erro'}</div>`; return; }
-  if(!arr.length){ cont.innerHTML = `<div class="card">Este aluno ainda não fez simulados.</div>`; show('detalheAluno'); return; }
+  if(!r.ok){ 
+    cont.innerHTML = `<div class="form-error">${arr.error || 'Erro'}</div>`; 
+    return; 
+  }
+
+  if(!arr.length){ 
+    cont.innerHTML = `<div class="card">Este aluno ainda não fez simulados.</div>`; 
+    show('detalheAluno'); 
+    return; 
+  }
 
   cont.innerHTML = arr.map(a=>{
     const simTitle = (SIMULADOS_CACHE.find(s=>String(s.id)===String(a.simuladoId))?.name) || `Simulado ${a.simuladoId}`;
@@ -623,3 +632,4 @@ async function openAlunoDetalhe(studentId, studentName){
     try{ await fetchSimulados(); }catch{}
   }
 })();
+
