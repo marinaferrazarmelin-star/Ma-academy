@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>GABARITA — Simulados ENEM</title>
   <link rel="stylesheet" href="/style.css">
-
-  <!-- Chart.js + datalabels (precisam vir antes do seu script) -->
+  <!-- Chart.js + datalabels -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 </head>
@@ -60,7 +59,6 @@
     <section id="view-simulados" class="view">
       <div class="container">
         <h2>Simulados ENEM</h2>
-        <p class="muted">Escolha um simulado abaixo.</p>
         <div id="listaSimulados" class="list"></div>
         <div id="simuladoQuestoes" class="card" style="display:none;"></div>
         <section id="resultado-geral" class="card" style="display:none;"></section>
@@ -71,7 +69,7 @@
 
     <!-- BANCO -->
     <section id="view-banco" class="view">
-      <div class="container"><h2>Banco de Questões</h2><p class="muted">Em breve: crie seu próprio simulado.</p></div>
+      <div class="container"><h2>Banco de Questões</h2><p class="muted">Em breve.</p></div>
     </section>
 
     <!-- PROGRESSO -->
@@ -93,10 +91,31 @@
 
     <!-- CLASSES -->
     <section id="view-classes" class="view">
-      <div class="container"><h2>Classes</h2><p class="muted">Área do professor e simulados da turma.</p></div>
+      <div class="container">
+        <h2>Classes</h2>
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="turma">Turma</button>
+          <button class="tab-btn" data-tab="aluno">Aluno</button>
+        </div>
+
+        <!-- TURMA -->
+        <div id="tab-turma" class="tab-content show">
+          <form id="formNovaTurma" class="card">
+            <label>Nome da turma:<input type="text" name="name" required></label>
+            <button type="submit" class="btn">Criar turma</button>
+          </form>
+          <div id="listaTurmas" class="list"></div>
+        </div>
+
+        <!-- ALUNO -->
+        <div id="tab-aluno" class="tab-content">
+          <div id="listaAlunos" class="list"></div>
+          <div id="detalheAluno"></div>
+        </div>
+      </div>
     </section>
 
-    <!-- REGISTER / LOGIN -->
+    <!-- REGISTER -->
     <section id="view-register" class="view">
       <div class="container card">
         <h2>Cadastre-se ou faça login</h2>
@@ -132,7 +151,6 @@
   </main>
 
   <footer class="footer">© 2025 GABARITA</footer>
-  <!-- IMPORTANTE: sem barra antes de script.js -->
-  <script src="script.js"></script>
+  <script src="/script.js"></script>
 </body>
 </html>
