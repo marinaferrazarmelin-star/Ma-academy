@@ -2,6 +2,16 @@
 // -------------------
 require("dotenv").config();
 
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false } // necessário no Render
+});
+
+// opcional: testar conexão no boot
+pool.query('SELECT 1').then(()=>console.log('✔ Postgres conectado')).catch(err=>console.error('✖ PG erro', err));
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
