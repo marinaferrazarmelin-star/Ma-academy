@@ -1,0 +1,20 @@
+{
+  "1": [
+    {
+      "id": 1,
+      "area": "Matemática",
+      "content": "Álgebra",
+      "text": "Resolva a equação: 2x + 3 = 7",
+      "options": ["x=1", "x=2", "x=3", "x=4"],
+      "answer": "x=2"
+    },
+    {
+      "id": 2,
+      "area": "Linguagens",
+      "content": "Gramática",
+      "text": "Qual a classe gramatical da palavra 'rápido' em 'Ele corre rápido'?",
+      "options": ["Verbo", "Adjetivo", "Advérbio", "Substantivo"],
+      "answer": "Advérbio"
+    }
+  ]
+}
