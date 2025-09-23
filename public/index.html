@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-">
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>GABARITA — Simulados ENEM</title>
   <link rel="stylesheet" href="/style.css">
@@ -104,13 +104,47 @@
             <label>Nome da turma:<input type="text" name="name" required></label>
             <button type="submit" class="btn">Criar turma</button>
           </form>
+
           <div id="listaTurmas" class="list"></div>
+
+          <div id="turmaDetalhe" class="card" style="display:none;">
+            <div class="row between">
+              <h3 id="turmaNome"></h3>
+              <div>
+                <label>Adicionar aluno por email:
+                  <input type="email" id="alunoEmail" placeholder="aluno@exemplo.com">
+                </label>
+                <button class="btn small" id="btnAddAluno">Adicionar</button>
+              </div>
+            </div>
+
+            <h4>Alunos</h4>
+            <div id="turmaAlunos" class="list"></div>
+
+            <h4 style="margin-top:14px;">Relatório da Turma</h4>
+            <div class="row">
+              <label>Simulado:
+                <select id="turmaSimSelect"></select>
+              </label>
+              <button class="btn small" id="btnLoadReport">Carregar</button>
+            </div>
+            <div id="turmaReport" class="report"></div>
+          </div>
         </div>
 
         <!-- ALUNO -->
         <div id="tab-aluno" class="tab-content">
+          <div class="row">
+            <label>Turma:
+              <select id="alunoTurmaSelect"></select>
+            </label>
+          </div>
           <div id="listaAlunos" class="list"></div>
-          <div id="detalheAluno"></div>
+          <div id="detalheAluno" class="card" style="display:none;">
+            <h3 id="alunoNome"></h3>
+            <h4>Histórico de Simulados</h4>
+            <div id="alunoHistorico" class="list"></div>
+          </div>
         </div>
       </div>
     </section>
