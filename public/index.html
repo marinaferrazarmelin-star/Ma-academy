@@ -72,22 +72,47 @@
       <div class="container"><h2>Banco de Questões</h2><p class="muted">Em breve.</p></div>
     </section>
 
-    <!-- PROGRESSO -->
-    <section id="view-progresso" class="view">
-      <div class="container">
-        <h2>Progresso</h2>
-        <div class="tabs">
-          <button class="tab-btn active" data-tab="historico">Histórico</button>
-          <button class="tab-btn" data-tab="graficos">Gráficos</button>
-        </div>
-        <div id="tab-historico" class="tab-content show">
-          <div id="historicoList" class="list"></div>
-        </div>
-        <div id="tab-graficos" class="tab-content">
-          <p class="muted">Em breve: gráficos de desempenho.</p>
+   <!-- PROGRESSO -->
+<section id="view-progresso" class="view">
+  <div class="container">
+    <h2>Progresso</h2>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="historico">Histórico</button>
+      <button class="tab-btn" data-tab="graficos">Gráficos</button>
+    </div>
+
+    <!-- Aba Histórico -->
+    <div id="tab-historico" class="tab-content show">
+      <div id="historicoList" class="list"></div>
+
+      <!-- NOVO: Detalhe do resultado de um simulado específico -->
+      <div id="historicoDetalhe" style="display:none; margin-top:20px;">
+        <h3 id="histSimTitulo"></h3>
+
+        <!-- Resultado Geral -->
+        <section id="hist-resultado-geral" class="card" style="display:none;"></section>
+
+        <!-- Resultado por Matéria -->
+        <section id="hist-resultado-materias" class="card" style="display:none;"></section>
+
+        <!-- Resultado por Conteúdo -->
+        <section id="hist-resultado-conteudos" class="card" style="display:none;"></section>
+
+        <!-- Questões detalhadas -->
+        <section id="hist-questoes" class="card" style="display:none;"></section>
+
+        <div class="row end">
+          <button class="btn ghost" id="btnVoltarHistorico">← Voltar ao Histórico</button>
         </div>
       </div>
-    </section>
+    </div>
+
+    <!-- Aba Gráficos -->
+    <div id="tab-graficos" class="tab-content">
+      <p class="muted">Em breve: gráficos de desempenho agregados.</p>
+    </div>
+  </div>
+</section>
 
     <!-- CLASSES -->
     <section id="view-classes" class="view">
@@ -188,3 +213,4 @@
   <script src="/script.js"></script>
 </body>
 </html>
+
