@@ -387,8 +387,10 @@ async function renderHistorico(){
     const r = await fetch('/me/history', { headers: authHeaders() });
     const arr = await r.json();
     if(!r.ok) throw new Error(arr.error || 'Falha ao obter histórico');
-    if(!arr.length){ wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`; return; }
-
+    if(!arr.length){ 
+      wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`; 
+      return; 
+    }
     wrap.innerHTML = arr.map(a=>{
       const statusDot = a.score>=75 ? 'done' : 'pending';
       const simTitle = (SIMULADOS_CACHE.find(s=>String(s.id)===String(a.simuladoId))?.name) || `Simulado ${a.simuladoId}`;
@@ -400,11 +402,16 @@ async function renderHistorico(){
             <span class="muted">• ${formatDate(a.date)}</span>
           </div>
           <div class="sim-row__right">
-            <button class="btn small" data-detail='${JSON.stringify(a).replace(/'/g,"&apos;")}'>Ver detalhes</button>
+            <span class="badge">${a.correct}/${a.total} acertos</span>
+            <button class="btn small" onclick="openHistoricoDetalhe('${a.id}')">Ver Detalhes</button>
           </div>
         </div>
       `;
     }).join('');
+  }catch(err){
+    wrap.innerHTML = `<div class="form-error">${err.message || 'Erro ao carregar histórico'}</div>`;
+  }
+}
 
     wrap.querySelectorAll('button[data-detail]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -667,5 +674,6 @@ async function openAlunoDetalhe(studentId, studentName){
     try{ await fetchSimulados(); }catch{}
   }
 })();
+
 
 
