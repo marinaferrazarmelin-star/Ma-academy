@@ -33,6 +33,7 @@ function ensureFile(file, fallback) {
 ensureFile(USERS_PATH, []);
 ensureFile(ATTEMPTS_PATH, []);
 ensureFile(CLASSES_PATH, []);
+// Estrutura: { "1":[ {id, area, content, text, options[], answer}, ... ] }
 ensureFile(QUESTIONS_PATH, { "1": [] });
 
 function read(file) {
@@ -42,10 +43,10 @@ function write(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
 }
 
-// carrega questões
+// carrega questões (em memória)
 let QUESTIONS = read(QUESTIONS_PATH);
 
-// ------------------ AUTH ------------------
+// -------------- AUTH --------------
 function signToken(user) {
   return jwt.sign(
     { id: user.id, role: user.role, name: user.name, email: user.email },
@@ -117,7 +118,7 @@ app.get("/me", auth, (req, res) => {
   });
 });
 
-// ------------------ SIMULADOS ------------------
+// -------------- SIMULADOS --------------
 app.get("/simulados", auth, (req, res) => {
   const list = Object.keys(QUESTIONS).map((k) => ({
     id: Number(k),
@@ -154,6 +155,8 @@ app.post("/simulado/:id/submit", auth, (req, res) => {
       id: q.id,
       area: q.area,
       content: q.content,
+      text: q.text,
+      options: q.options,
       chosen: answers[q.id] || null,
       correct: q.answer,
       hit: isCorrect,
@@ -211,22 +214,14 @@ app.post("/simulado/:id/submit", auth, (req, res) => {
   });
 });
 
-// histórico do próprio aluno
+// histórico do aluno (próprio ou por id de professor)
 app.get("/me/history", auth, (req, res) => {
-  const attempts = read(ATTEMPTS_PATH).filter((a) => a.userId === req.user.id);
+  const userId = req.query.userId || req.user.id;
+  const attempts = read(ATTEMPTS_PATH).filter((a) => a.userId === userId);
   res.json(attempts.sort((a, b) => new Date(b.date) - new Date(a.date)));
 });
 
-// histórico de um aluno específico (professor apenas)
-app.get("/users/:id/history", auth, (req, res) => {
-  if (req.user.role !== "teacher")
-    return res.status(403).json({ error: "teacher only" });
-
-  const attempts = read(ATTEMPTS_PATH).filter((a) => a.userId === req.params.id);
-  res.json(attempts.sort((a, b) => new Date(b.date) - new Date(a.date)));
-});
-
-// ------------------ CLASSES ------------------
+// -------------- PROFESSOR / TURMA --------------
 function mustTeacher(req, res, next) {
   if (req.user.role !== "teacher")
     return res.status(403).json({ error: "teacher only" });
@@ -237,7 +232,12 @@ app.post("/classes", auth, mustTeacher, (req, res) => {
   const { name } = req.body || {};
   if (!name) return res.status(400).json({ error: "name required" });
   const classes = read(CLASSES_PATH);
-  const cls = { id: uuidv4(), name, teacherId: req.user.id, studentIds: [] };
+  const cls = {
+    id: uuidv4(),
+    name,
+    teacherId: req.user.id,
+    studentIds: [],
+  };
   classes.push(cls);
   write(CLASSES_PATH, classes);
   res.json(cls);
@@ -248,20 +248,13 @@ app.get("/classes", auth, mustTeacher, (req, res) => {
   res.json(classes);
 });
 
-// detalhes da turma + alunos
 app.get("/classes/:id", auth, mustTeacher, (req, res) => {
   const classes = read(CLASSES_PATH);
+  const users = read(USERS_PATH);
   const cls = classes.find((c) => c.id === req.params.id && c.teacherId === req.user.id);
   if (!cls) return res.status(404).json({ error: "class not found" });
-
-  const users = read(USERS_PATH);
-  const students = users.filter(u => cls.studentIds.includes(u.id));
-
-  res.json({
-    id: cls.id,
-    name: cls.name,
-    students: students.map(u => ({ id: u.id, name: u.name, email: u.email }))
-  });
+  const students = users.filter((u) => cls.studentIds.includes(u.id));
+  res.json({ ...cls, students });
 });
 
 app.post("/classes/:id/add-student", auth, mustTeacher, (req, res) => {
@@ -277,7 +270,9 @@ app.post("/classes/:id/add-student", auth, mustTeacher, (req, res) => {
   if (!student) return res.status(404).json({ error: "student not found" });
 
   const classes = read(CLASSES_PATH);
-  const cls = classes.find((c) => c.id === req.params.id && c.teacherId === req.user.id);
+  const cls = classes.find(
+    (c) => c.id === req.params.id && c.teacherId === req.user.id
+  );
   if (!cls) return res.status(404).json({ error: "class not found" });
   if (!cls.studentIds.includes(student.id)) cls.studentIds.push(student.id);
   write(CLASSES_PATH, classes);
@@ -285,7 +280,7 @@ app.post("/classes/:id/add-student", auth, mustTeacher, (req, res) => {
 });
 
 app.get("/classes/:id/report", auth, mustTeacher, (req, res) => {
-  const simId = Number(req.query.simulado || 1);
+  const simId = String(req.query.simulado || 1);
   const classes = read(CLASSES_PATH);
   const attempts = read(ATTEMPTS_PATH);
   const users = read(USERS_PATH);
@@ -297,7 +292,7 @@ app.get("/classes/:id/report", auth, mustTeacher, (req, res) => {
 
   const studs = cls.studentIds;
   const attemptsClass = attempts.filter(
-    (a) => Number(a.simuladoId) === simId && studs.includes(a.userId)
+    (a) => String(a.simuladoId) === simId && studs.includes(a.userId)
   );
 
   const avg = attemptsClass.length
