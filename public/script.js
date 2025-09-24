@@ -11,6 +11,7 @@ let RESULT = null;               // {score,...}
 let BY_AREA = [];                // [{area,total,correct,pct}]
 let BY_CONTENT = [];             // [{content,total,correct,pct}]
 let CONTENT_AREA = {};           // {content: area}
+let CURRENT_ATTEMPT = null;      // <- usado para histórico
 
 const charts = { geral:null, subjects:{}, conteudos:null };
 
@@ -199,7 +200,6 @@ async function renderListaSimulados(){
         </div>
       `;
     }).join('');
-    // eventos
     wrap.querySelectorAll('button[data-action="start"]').forEach(btn=>{
       btn.addEventListener('click', ()=> startSimulado(Number(btn.dataset.id)));
     });
@@ -245,12 +245,14 @@ function setupResultadoSections(){
         <label>Matéria:&nbsp;<select id="selectArea"></select></label>
       </div>
       <div class="viz-wide" style="height:460px"><canvas id="chartConteudos"></canvas></div>
+      <div id="questoesDetalhe"></div>
       <div class="row end" style="margin-top:10px">
         <button class="btn ghost" id="btnBackMaterias">← Voltar por Matéria</button>
       </div>
     `;
   }
 }
+
 async function startSimulado(id){
   CURRENT_SIM = id; ANSWERS = {};
   const r = await fetch(`/simulado/${id}`, { headers: authHeaders() });
@@ -264,15 +266,16 @@ async function startSimulado(id){
       <div class="qcard">
         <div class="muted">${q.area} • ${q.content}</div>
         <p><b>Q${q.id}.</b> ${q.text}</p>
-        ${q.options.map(op=>`
-          <label class="option"><input type="radio" name="q${q.id}" value="${op}" onchange="ANSWERS[${q.id}]='${op}'"> ${op}</label>
-        `).join('')}
+        ${q.options.map(op=>
+          `<label class="option"><input type="radio" name="q${q.id}" value="${op}" onchange="ANSWERS[${q.id}]='${op}'"> ${op}</label>`
+        ).join('')}
       </div>
     `).join('') +
     `<div class="row end"><button class="btn" id="btnSubmit">Finalizar simulado</button></div>`;
   hide('resultado-geral'); hide('resultado-materias'); hide('resultado-conteudos');
   $('#btnSubmit').addEventListener('click', submitSimulado);
 }
+
 async function submitSimulado(){
   const total = CURRENT_QUESTIONS.length;
   const answered = Object.keys(ANSWERS).length;
@@ -288,10 +291,13 @@ async function submitSimulado(){
   RESULT = { score: Math.round(data.score) };
   BY_AREA = data.byArea || [];
   BY_CONTENT = data.byContent || [];
+  CURRENT_ATTEMPT = data; // <- salva tentativa
   setStatusDone(CURRENT_SIM);
   $('#simuladoQuestoes').style.display='none';
   renderTelaGeral();
 }
+
+/*************** RESULTADOS ***************/
 function renderTelaGeral(){
   destroyAll(); show('resultado-geral'); hide('resultado-materias'); hide('resultado-conteudos');
   const ctx = $('#chartGeral').getContext('2d');
@@ -304,6 +310,7 @@ function renderTelaGeral(){
   });
   $('#btnToMaterias').onclick = renderTelaMaterias;
 }
+
 function renderTelaMaterias(){
   destroyAll(); hide('resultado-geral'); show('resultado-materias'); hide('resultado-conteudos');
   const grid = $('#gridMaterias'); grid.innerHTML = '';
@@ -330,6 +337,7 @@ function renderTelaMaterias(){
     if(firstArea) $('#selectArea').value = firstArea;
   };
 }
+
 function renderTelaConteudos(area){
   destroyAll(); hide('resultado-geral'); hide('resultado-materias'); show('resultado-conteudos');
   const sel = $('#selectArea');
@@ -348,6 +356,19 @@ function renderTelaConteudos(area){
       plugins:{ legend:{display:false}, datalabels:{ display:true, align:'end', anchor:'end', formatter:(v)=>v+'%', color:'#111', font:{weight:'bold'} } }
     }, plugins:[ChartDataLabels]
   });
+
+  // Detalhes das questões
+  const qWrap = $('#questoesDetalhe');
+  if(qWrap && CURRENT_ATTEMPT?.perQuestion){
+    const qs = CURRENT_ATTEMPT.perQuestion.filter(q => CONTENT_AREA[q.content] === (area || sel.value));
+    qWrap.innerHTML = qs.map(q=>`
+      <div class="qcard ${q.hit?'ok':'fail'}">
+        <div class="muted">${q.area} • ${q.content}</div>
+        <p><b>Q${q.id}.</b> ${q.text}</p>
+        <p>Sua resposta: <b>${q.chosen || '-'}</b> ${q.hit?'✅':'❌'} — Correta: <b>${q.correct}</b></p>
+      </div>
+    `).join('');
+  }
   $('#btnBackMaterias').onclick = renderTelaMaterias;
 }
 
@@ -357,6 +378,7 @@ async function openProgresso(){
   switchToTab(view, 'historico');
   await renderHistorico();
 }
+
 async function renderHistorico(){
   const wrap = $('#historicoList');
   if(!wrap) return;
@@ -366,6 +388,7 @@ async function renderHistorico(){
     const arr = await r.json();
     if(!r.ok) throw new Error(arr.error || 'Falha ao obter histórico');
     if(!arr.length){ wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`; return; }
+
     wrap.innerHTML = arr.map(a=>{
       const statusDot = a.score>=75 ? 'done' : 'pending';
       const simTitle = (SIMULADOS_CACHE.find(s=>String(s.id)===String(a.simuladoId))?.name) || `Simulado ${a.simuladoId}`;
@@ -377,11 +400,23 @@ async function renderHistorico(){
             <span class="muted">• ${formatDate(a.date)}</span>
           </div>
           <div class="sim-row__right">
-            <span class="badge">${a.correct}/${a.total} acertos</span>
+            <button class="btn small" data-detail='${JSON.stringify(a).replace(/'/g,"&apos;")}'>Ver detalhes</button>
           </div>
         </div>
       `;
     }).join('');
+
+    wrap.querySelectorAll('button[data-detail]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        CURRENT_ATTEMPT = JSON.parse(btn.dataset.detail.replace(/&apos;/g,"'"));
+        RESULT = { score: Math.round(CURRENT_ATTEMPT.score) };
+        BY_AREA = CURRENT_ATTEMPT.byArea || [];
+        BY_CONTENT = CURRENT_ATTEMPT.byContent || [];
+        CONTENT_AREA = {};
+        CURRENT_ATTEMPT.perQuestion?.forEach(q => { CONTENT_AREA[q.content]=q.area; });
+        renderTelaGeral();
+      });
+    });
   }catch(err){
     wrap.innerHTML = `<div class="form-error">${err.message || 'Erro ao carregar histórico'}</div>`;
   }
@@ -632,4 +667,5 @@ async function openAlunoDetalhe(studentId, studentName){
     try{ await fetchSimulados(); }catch{}
   }
 })();
+
 
