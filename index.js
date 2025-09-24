@@ -190,7 +190,7 @@ app.post("/simulado/:id/submit", auth, (req, res) => {
 
   // salva histórico
   const attempts = read(ATTEMPTS_PATH);
-  attempts.push({
+  const attempt = {
     id: uuidv4(),
     userId: req.user.id,
     simuladoId: simId,
@@ -201,17 +201,11 @@ app.post("/simulado/:id/submit", auth, (req, res) => {
     byArea: areaArray,
     byContent: contentArray,
     perQuestion
-  });
+  };
+  attempts.push(attempt);
   write(ATTEMPTS_PATH, attempts);
 
-  res.json({
-    score,
-    total,
-    correct,
-    byArea: areaArray,
-    byContent: contentArray,
-    perQuestion,
-  });
+  res.json(attempt);
 });
 
 // histórico do aluno (próprio ou por id de professor)
@@ -219,6 +213,16 @@ app.get("/me/history", auth, (req, res) => {
   const userId = req.query.userId || req.user.id;
   const attempts = read(ATTEMPTS_PATH).filter((a) => a.userId === userId);
   res.json(attempts.sort((a, b) => new Date(b.date) - new Date(a.date)));
+});
+
+// detalhe de um attempt específico
+app.get("/attempts/:id", auth, (req, res) => {
+  const attempts = read(ATTEMPTS_PATH);
+  const attempt = attempts.find(
+    (a) => a.id === req.params.id && a.userId === req.user.id
+  );
+  if (!attempt) return res.status(404).json({ error: "attempt not found" });
+  res.json(attempt);
 });
 
 // -------------- PROFESSOR / TURMA --------------
