@@ -11,7 +11,6 @@ let RESULT = null;               // {score,...}
 let BY_AREA = [];                // [{area,total,correct,pct}]
 let BY_CONTENT = [];             // [{content,total,correct,pct}]
 let CONTENT_AREA = {};           // {content: area}
-let CURRENT_ATTEMPT = null;      // <- usado para histórico
 
 const charts = { geral:null, subjects:{}, conteudos:null };
 
@@ -200,6 +199,7 @@ async function renderListaSimulados(){
         </div>
       `;
     }).join('');
+    // eventos
     wrap.querySelectorAll('button[data-action="start"]').forEach(btn=>{
       btn.addEventListener('click', ()=> startSimulado(Number(btn.dataset.id)));
     });
@@ -245,14 +245,13 @@ function setupResultadoSections(){
         <label>Matéria:&nbsp;<select id="selectArea"></select></label>
       </div>
       <div class="viz-wide" style="height:460px"><canvas id="chartConteudos"></canvas></div>
-      <div id="questoesDetalhe"></div>
+      <div id="conteudoQuestoes"></div>
       <div class="row end" style="margin-top:10px">
         <button class="btn ghost" id="btnBackMaterias">← Voltar por Matéria</button>
       </div>
     `;
   }
 }
-
 async function startSimulado(id){
   CURRENT_SIM = id; ANSWERS = {};
   const r = await fetch(`/simulado/${id}`, { headers: authHeaders() });
@@ -266,16 +265,15 @@ async function startSimulado(id){
       <div class="qcard">
         <div class="muted">${q.area} • ${q.content}</div>
         <p><b>Q${q.id}.</b> ${q.text}</p>
-        ${q.options.map(op=>
-          `<label class="option"><input type="radio" name="q${q.id}" value="${op}" onchange="ANSWERS[${q.id}]='${op}'"> ${op}</label>`
-        ).join('')}
+        ${q.options.map(op=>`
+          <label class="option"><input type="radio" name="q${q.id}" value="${op}" onchange="ANSWERS[${q.id}]='${op}'"> ${op}</label>
+        `).join('')}
       </div>
     `).join('') +
     `<div class="row end"><button class="btn" id="btnSubmit">Finalizar simulado</button></div>`;
   hide('resultado-geral'); hide('resultado-materias'); hide('resultado-conteudos');
   $('#btnSubmit').addEventListener('click', submitSimulado);
 }
-
 async function submitSimulado(){
   const total = CURRENT_QUESTIONS.length;
   const answered = Object.keys(ANSWERS).length;
@@ -291,13 +289,11 @@ async function submitSimulado(){
   RESULT = { score: Math.round(data.score) };
   BY_AREA = data.byArea || [];
   BY_CONTENT = data.byContent || [];
-  CURRENT_ATTEMPT = data; // <- salva tentativa
+  PER_QUESTIONS = data.perQuestion || [];
   setStatusDone(CURRENT_SIM);
   $('#simuladoQuestoes').style.display='none';
   renderTelaGeral();
 }
-
-/*************** RESULTADOS ***************/
 function renderTelaGeral(){
   destroyAll(); show('resultado-geral'); hide('resultado-materias'); hide('resultado-conteudos');
   const ctx = $('#chartGeral').getContext('2d');
@@ -310,7 +306,6 @@ function renderTelaGeral(){
   });
   $('#btnToMaterias').onclick = renderTelaMaterias;
 }
-
 function renderTelaMaterias(){
   destroyAll(); hide('resultado-geral'); show('resultado-materias'); hide('resultado-conteudos');
   const grid = $('#gridMaterias'); grid.innerHTML = '';
@@ -337,7 +332,6 @@ function renderTelaMaterias(){
     if(firstArea) $('#selectArea').value = firstArea;
   };
 }
-
 function renderTelaConteudos(area){
   destroyAll(); hide('resultado-geral'); hide('resultado-materias'); show('resultado-conteudos');
   const sel = $('#selectArea');
@@ -356,20 +350,22 @@ function renderTelaConteudos(area){
       plugins:{ legend:{display:false}, datalabels:{ display:true, align:'end', anchor:'end', formatter:(v)=>v+'%', color:'#111', font:{weight:'bold'} } }
     }, plugins:[ChartDataLabels]
   });
-
-  // Detalhes das questões
-  const qWrap = $('#questoesDetalhe');
-  if(qWrap && CURRENT_ATTEMPT?.perQuestion){
-    const qs = CURRENT_ATTEMPT.perQuestion.filter(q => CONTENT_AREA[q.content] === (area || sel.value));
-    qWrap.innerHTML = qs.map(q=>`
-      <div class="qcard ${q.hit?'ok':'fail'}">
-        <div class="muted">${q.area} • ${q.content}</div>
-        <p><b>Q${q.id}.</b> ${q.text}</p>
-        <p>Sua resposta: <b>${q.chosen || '-'}</b> ${q.hit?'✅':'❌'} — Correta: <b>${q.correct}</b></p>
-      </div>
-    `).join('');
-  }
   $('#btnBackMaterias').onclick = renderTelaMaterias;
+
+  // Questões detalhadas do conteúdo
+  const qbox = $('#conteudoQuestoes');
+  const questoes = PER_QUESTIONS.filter(q => CONTENT_AREA[q.content] === (area || sel.value));
+  qbox.innerHTML = questoes.map(q=>`
+    <div class="qcard ${q.hit ? 'hit':'miss'}">
+      <div class="muted">${q.area} • ${q.content}</div>
+      <p><b>Q${q.id}.</b> ${q.text}</p>
+      ${q.options.map(op=>`
+        <div class="option ${op===q.correct?'correct':(op===q.chosen?'chosen':'')}">
+          ${op} ${op===q.correct?'✔':(op===q.chosen && op!==q.correct?'✘':'')}
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
 }
 
 /*************** PROGRESSO ***************/
@@ -378,7 +374,6 @@ async function openProgresso(){
   switchToTab(view, 'historico');
   await renderHistorico();
 }
-
 async function renderHistorico(){
   const wrap = $('#historicoList');
   if(!wrap) return;
@@ -387,10 +382,7 @@ async function renderHistorico(){
     const r = await fetch('/me/history', { headers: authHeaders() });
     const arr = await r.json();
     if(!r.ok) throw new Error(arr.error || 'Falha ao obter histórico');
-    if(!arr.length){ 
-      wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`; 
-      return; 
-    }
+    if(!arr.length){ wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`; return; }
     wrap.innerHTML = arr.map(a=>{
       const statusDot = a.score>=75 ? 'done' : 'pending';
       const simTitle = (SIMULADOS_CACHE.find(s=>String(s.id)===String(a.simuladoId))?.name) || `Simulado ${a.simuladoId}`;
@@ -402,8 +394,7 @@ async function renderHistorico(){
             <span class="muted">• ${formatDate(a.date)}</span>
           </div>
           <div class="sim-row__right">
-            <span class="badge">${a.correct}/${a.total} acertos</span>
-            <button class="btn small" onclick="openHistoricoDetalhe('${a.id}')">Ver Detalhes</button>
+            <button class="btn small" onclick="abrirDetalheHistorico('${a.id}')">Ver Detalhes</button>
           </div>
         </div>
       `;
@@ -412,57 +403,19 @@ async function renderHistorico(){
     wrap.innerHTML = `<div class="form-error">${err.message || 'Erro ao carregar histórico'}</div>`;
   }
 }
+async function abrirDetalheHistorico(attemptId){
+  const r = await fetch('/me/history', { headers: authHeaders() });
+  const arr = await r.json();
+  const attempt = arr.find(a => a.id === attemptId);
+  if(!attempt){ alert('Tentativa não encontrada'); return; }
 
-async function openHistoricoDetalhe(attemptId){
-  try {
-    const r = await fetch(`/attempts/${attemptId}`, { headers: authHeaders() });
-    const data = await r.json();
-    if(!r.ok) throw new Error(data.error || 'Erro ao carregar detalhes');
+  RESULT = { score: Math.round(attempt.score) };
+  BY_AREA = attempt.byArea || [];
+  BY_CONTENT = attempt.byContent || [];
+  PER_QUESTIONS = attempt.perQuestion || [];
+  CONTENT_AREA = {}; PER_QUESTIONS.forEach(q => CONTENT_AREA[q.content]=q.area);
 
-    RESULT = { score: Math.round(data.score) };
-    BY_AREA = data.byArea || [];
-    BY_CONTENT = data.byContent || [];
-    CONTENT_AREA = {};
-    (data.questions || []).forEach(q => CONTENT_AREA[q.content]=q.area);
-
-    // mostra a mesma tela do resultado
-    destroyAll();
-    renderTelaGeral();
-
-    // lista de questões
-    const cont = document.createElement('div');
-    cont.innerHTML = `<h4>Questões</h4>` + (data.questions || []).map(q=>{
-      const isCorrect = q.givenAnswer === q.correctAnswer;
-      return `
-        <div class="qcard ${isCorrect ? 'correct' : 'wrong'}">
-          <div class="muted">${q.area} • ${q.content}</div>
-          <p><b>Q${q.id}.</b> ${q.text}</p>
-          <p>Sua resposta: <b>${q.givenAnswer || '-'}</b></p>
-          <p>Correta: <b>${q.correctAnswer}</b></p>
-        </div>
-      `;
-    }).join('');
-    $('#resultado-conteudos').appendChild(cont);
-
-  } catch(err){
-    alert(err.message || 'Erro ao abrir detalhes');
-  }
-}
-
-    wrap.querySelectorAll('button[data-detail]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        CURRENT_ATTEMPT = JSON.parse(btn.dataset.detail.replace(/&apos;/g,"'"));
-        RESULT = { score: Math.round(CURRENT_ATTEMPT.score) };
-        BY_AREA = CURRENT_ATTEMPT.byArea || [];
-        BY_CONTENT = CURRENT_ATTEMPT.byContent || [];
-        CONTENT_AREA = {};
-        CURRENT_ATTEMPT.perQuestion?.forEach(q => { CONTENT_AREA[q.content]=q.area; });
-        renderTelaGeral();
-      });
-    });
-  }catch(err){
-    wrap.innerHTML = `<div class="form-error">${err.message || 'Erro ao carregar histórico'}</div>`;
-  }
+  renderTelaGeral();
 }
 
 /*************** CLASSES ***************/
@@ -471,17 +424,13 @@ async function openClasses(){
     $('#view-classes').innerHTML = `<div class="container"><h2>Classes</h2><p class="muted">Apenas professores têm acesso a esta área.</p></div>`;
     return;
   }
-  // Prepara simulado selector (aba Turma)
   await ensureSimSelects();
-  // Liga eventos
   attachTurmaUI();
   attachAlunoUI();
-  // Carrega lista de turmas
   await loadTurmas();
 }
 
 async function ensureSimSelects(){
-  // carrega simulados para selectors
   if (!SIMULADOS_CACHE.length){
     try { await fetchSimulados(); } catch {}
   }
@@ -490,7 +439,6 @@ async function ensureSimSelects(){
     turmaSel.innerHTML = SIMULADOS_CACHE.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   }
 }
-
 function attachTurmaUI(){
   const form = $('#formNovaTurma');
   if (form && !form.dataset.bound){
@@ -538,7 +486,6 @@ function attachTurmaUI(){
     });
   }
 }
-
 function attachAlunoUI(){
   const alunoTurmaSelect = $('#alunoTurmaSelect');
   if (alunoTurmaSelect && !alunoTurmaSelect.dataset.bound){
@@ -549,7 +496,6 @@ function attachAlunoUI(){
     });
   }
 }
-
 async function loadTurmas(){
   const wrap = $('#listaTurmas');
   if(!wrap) return;
@@ -558,8 +504,6 @@ async function loadTurmas(){
   const data = await r.json();
   if(!r.ok){ wrap.innerHTML = `<div class="form-error">${data.error || 'Erro'}</div>`; return; }
   if(!data.length){ wrap.innerHTML = `<div class="card"><b>Nenhuma turma criada ainda.</b></div>`; return; }
-
-  // Preencher select da aba Aluno
   const sel = $('#alunoTurmaSelect');
   if(sel){ sel.innerHTML = data.map(t=>`<option value="${t.id}">${t.name}</option>`).join(''); }
 
@@ -574,43 +518,32 @@ async function loadTurmas(){
       </div>
     </div>
   `).join('');
-
   wrap.querySelectorAll('button[data-open]').forEach(btn=>{
     btn.addEventListener('click', ()=> openTurmaDetalhe(btn.dataset.open));
   });
-
-  // carrega alunos da primeira turma na aba Aluno
   if (sel && data[0]) {
     sel.value = data[0].id;
     await loadAlunosDaTurma(data[0].id);
   }
 }
-
 async function openTurmaDetalhe(classId){
   const r = await fetch(`/classes/${classId}`, { headers: authHeaders() });
   const data = await r.json();
   if(!r.ok){ alert(data.error || 'Erro ao abrir turma'); return; }
-
   $('#turmaNome').textContent = data.name;
   const alunos = data.students || [];
   $('#turmaAlunos').innerHTML = alunos.length
     ? alunos.map(a=>`<div class="sim-row"><div class="sim-row__left"><b>${a.name}</b><span class="muted">• ${a.email}</span></div></div>`).join('')
     : `<div class="card">Nenhum aluno ainda.</div>`;
-
-  // Botões vinculados a turma corrente
   $('#btnAddAluno').dataset.classId = classId;
   $('#btnLoadReport').dataset.classId = classId;
-
   show('turmaDetalhe');
-  // limpa relatório até usuário clicar "Carregar"
   $('#turmaReport').innerHTML = `<div class="muted">Selecione um simulado e clique em "Carregar".</div>`;
 }
-
 async function loadTurmaReport(classId, simId){
   const r = await fetch(`/classes/${classId}/report?simulado=${simId}`, { headers: authHeaders() });
   const data = await r.json();
   if(!r.ok){ alert(data.error || 'Erro ao carregar relatório'); return; }
-
   const rep = $('#turmaReport');
   const area = (data.byArea||[]).map(x=>`
     <div class="rowb"><div>${x.area}</div><div>${x.total}</div><div>${x.correct}</div><div>${x.pct}%</div></div>
@@ -621,28 +554,16 @@ async function loadTurmaReport(classId, simId){
   const studs = (data.students||[]).map(s=>`
     <div class="sim-row"><div class="sim-row__left"><b>${s.student}</b></div><div class="sim-row__right"><span class="badge">${s.score}%</span></div></div>
   `).join('') || `<div class="muted">Nenhum aluno avaliável ainda.</div>`;
-
   rep.innerHTML = `
     <h5>Média da turma: ${data.average || 0}%</h5>
     <div class="two-cols">
-      <div>
-        <div class="table-like">
-          <div class="rowh"><div>Matéria</div><div>Total</div><div>Acertos</div><div>%</div></div>
-          ${area}
-        </div>
-      </div>
-      <div>
-        <div class="table-like">
-          <div class="rowh"><div>Conteúdo</div><div>Total</div><div>Acertos</div><div>%</div></div>
-          ${cont}
-        </div>
-      </div>
+      <div><div class="table-like"><div class="rowh"><div>Matéria</div><div>Total</div><div>Acertos</div><div>%</div></div>${area}</div></div>
+      <div><div class="table-like"><div class="rowh"><div>Conteúdo</div><div>Total</div><div>Acertos</div><div>%</div></div>${cont}</div></div>
     </div>
     <h5 style="margin-top:10px;">Alunos</h5>
     ${studs}
   `;
 }
-
 async function loadAlunosDaTurma(classId){
   if(!classId){ $('#listaAlunos').innerHTML = `<div class="muted">Selecione uma turma.</div>`; return; }
   const r = await fetch(`/classes/${classId}`, { headers: authHeaders() });
@@ -658,40 +579,24 @@ async function loadAlunosDaTurma(classId){
       </div>
     `).join('')
     : `<div class="card">Nenhum aluno nessa turma.</div>`;
-
   list.querySelectorAll('button[data-open-stu]').forEach(btn=>{
     btn.addEventListener('click', ()=> openAlunoDetalhe(btn.dataset.openStu, btn.dataset.stuname));
   });
 }
-
 async function openAlunoDetalhe(studentId, studentName){
   $('#alunoNome').textContent = studentName || 'Aluno';
   const cont = $('#alunoHistorico');
   cont.innerHTML = `<div class="muted">Carregando...</div>`;
-
-  const r = await fetch(`/users/${encodeURIComponent(studentId)}/history`, { headers: authHeaders() });
+  const r = await fetch(`/me/history?userId=${encodeURIComponent(studentId)}`, { headers: authHeaders() });
   const arr = await r.json();
-  if(!r.ok){ 
-    cont.innerHTML = `<div class="form-error">${arr.error || 'Erro'}</div>`; 
-    return; 
-  }
-
-  if(!arr.length){ 
-    cont.innerHTML = `<div class="card">Este aluno ainda não fez simulados.</div>`; 
-    show('detalheAluno'); 
-    return; 
-  }
-
+  if(!r.ok){ cont.innerHTML = `<div class="form-error">${arr.error || 'Erro'}</div>`; return; }
+  if(!arr.length){ cont.innerHTML = `<div class="card">Este aluno ainda não fez simulados.</div>`; show('detalheAluno'); return; }
   cont.innerHTML = arr.map(a=>{
     const simTitle = (SIMULADOS_CACHE.find(s=>String(s.id)===String(a.simuladoId))?.name) || `Simulado ${a.simuladoId}`;
     return `
       <div class="sim-row">
-        <div class="sim-row__left">
-          <b>${simTitle}</b><span class="muted">• ${formatDate(a.date)}</span>
-        </div>
-        <div class="sim-row__right">
-          <span class="badge">${Math.round(a.score)}%</span>
-        </div>
+        <div class="sim-row__left"><b>${simTitle}</b><span class="muted">• ${formatDate(a.date)}</span></div>
+        <div class="sim-row__right"><button class="btn small" onclick="abrirDetalheHistorico('${a.id}')">Ver Detalhes</button></div>
       </div>
     `;
   }).join('');
@@ -703,14 +608,8 @@ async function openAlunoDetalhe(studentId, studentName){
   loadToken();
   if(TOKEN){ await fetchMe(); }
   attachRegisterLogin();
-  // rota inicial
   setView('home');
-  // pré-carrega simulados se logado (melhora as labels do histórico)
   if(TOKEN){
     try{ await fetchSimulados(); }catch{}
   }
 })();
-
-
-
-
