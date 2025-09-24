@@ -413,6 +413,42 @@ async function renderHistorico(){
   }
 }
 
+async function openHistoricoDetalhe(attemptId){
+  try {
+    const r = await fetch(`/attempts/${attemptId}`, { headers: authHeaders() });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Erro ao carregar detalhes');
+
+    RESULT = { score: Math.round(data.score) };
+    BY_AREA = data.byArea || [];
+    BY_CONTENT = data.byContent || [];
+    CONTENT_AREA = {};
+    (data.questions || []).forEach(q => CONTENT_AREA[q.content]=q.area);
+
+    // mostra a mesma tela do resultado
+    destroyAll();
+    renderTelaGeral();
+
+    // lista de questões
+    const cont = document.createElement('div');
+    cont.innerHTML = `<h4>Questões</h4>` + (data.questions || []).map(q=>{
+      const isCorrect = q.givenAnswer === q.correctAnswer;
+      return `
+        <div class="qcard ${isCorrect ? 'correct' : 'wrong'}">
+          <div class="muted">${q.area} • ${q.content}</div>
+          <p><b>Q${q.id}.</b> ${q.text}</p>
+          <p>Sua resposta: <b>${q.givenAnswer || '-'}</b></p>
+          <p>Correta: <b>${q.correctAnswer}</b></p>
+        </div>
+      `;
+    }).join('');
+    $('#resultado-conteudos').appendChild(cont);
+
+  } catch(err){
+    alert(err.message || 'Erro ao abrir detalhes');
+  }
+}
+
     wrap.querySelectorAll('button[data-detail]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         CURRENT_ATTEMPT = JSON.parse(btn.dataset.detail.replace(/&apos;/g,"'"));
@@ -674,6 +710,7 @@ async function openAlunoDetalhe(studentId, studentName){
     try{ await fetchSimulados(); }catch{}
   }
 })();
+
 
 
 
