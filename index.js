@@ -33,7 +33,6 @@ function ensureFile(file, fallback) {
 ensureFile(USERS_PATH, []);
 ensureFile(ATTEMPTS_PATH, []);
 ensureFile(CLASSES_PATH, []);
-// Estrutura: { "1":[ {id, area, content, text, options[], answer}, ... ] }
 ensureFile(QUESTIONS_PATH, { "1": [] });
 
 function read(file) {
@@ -188,9 +187,8 @@ app.post("/simulado/:id/submit", auth, (req, res) => {
     pct: Math.round((s.correct / s.total) * 100),
   }));
 
-  // salva histórico
   const attempts = read(ATTEMPTS_PATH);
-  const attempt = {
+  attempts.push({
     id: uuidv4(),
     userId: req.user.id,
     simuladoId: simId,
@@ -201,28 +199,24 @@ app.post("/simulado/:id/submit", auth, (req, res) => {
     byArea: areaArray,
     byContent: contentArray,
     perQuestion
-  };
-  attempts.push(attempt);
+  });
   write(ATTEMPTS_PATH, attempts);
 
-  res.json(attempt);
+  res.json({
+    score,
+    total,
+    correct,
+    byArea: areaArray,
+    byContent: contentArray,
+    perQuestion,
+  });
 });
 
-// histórico do aluno (próprio ou por id de professor)
+// histórico do aluno
 app.get("/me/history", auth, (req, res) => {
   const userId = req.query.userId || req.user.id;
   const attempts = read(ATTEMPTS_PATH).filter((a) => a.userId === userId);
   res.json(attempts.sort((a, b) => new Date(b.date) - new Date(a.date)));
-});
-
-// detalhe de um attempt específico
-app.get("/attempts/:id", auth, (req, res) => {
-  const attempts = read(ATTEMPTS_PATH);
-  const attempt = attempts.find(
-    (a) => a.id === req.params.id && a.userId === req.user.id
-  );
-  if (!attempt) return res.status(404).json({ error: "attempt not found" });
-  res.json(attempt);
 });
 
 // -------------- PROFESSOR / TURMA --------------
