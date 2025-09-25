@@ -222,8 +222,15 @@ app.get("/me/history", auth, (req, res) => {
 // detalhes de um attempt específico
 app.get("/attempt/:id", auth, (req,res)=>{
   const attempts = read(ATTEMPTS_PATH);
-  const att = attempts.find(a => a.id === req.params.id && a.userId === req.user.id);
+  let att = attempts.find(a => a.id === req.params.id);
+
   if(!att) return res.status(404).json({ error:"attempt not found" });
+
+  // se for aluno, só pode acessar os próprios attempts
+  if(req.user.role === "student" && att.userId !== req.user.id){
+    return res.status(403).json({ error:"forbidden" });
+  }
+
   res.json(att);
 });
 
