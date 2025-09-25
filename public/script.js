@@ -401,9 +401,12 @@ async function renderHistorico(){
     }).join('');
 
     // evento para abrir detalhes
-    wrap.querySelectorAll('button[data-detail]').forEach(btn=>{
-      btn.addEventListener('click', ()=> openDetalheHistorico(btn.dataset.detail));
-    });
+wrap.querySelectorAll('button[data-detail]').forEach(btn=>{
+  btn.onclick = () => {
+    const attemptId = btn.getAttribute('data-detail');
+    if(attemptId) openDetalheHistorico(attemptId);
+  };
+});
 
   }catch(err){
     wrap.innerHTML = `<div class="form-error">${err.message || 'Erro ao carregar histórico'}</div>`;
@@ -427,19 +430,19 @@ async function openDetalheHistorico(attemptId){
   // renderiza a mesma tela de resultado que aparece após o simulado
   renderTelaGeral();
 
-  // mostra também a lista de questões abaixo do gráfico
-  const box = $('#resultado-conteudos');
-  if(box){
-    const htmlQuestoes = (data.perQuestion||[]).map(q=>`
-      <div class="qcard ${q.hit ? 'hit':'miss'}">
-        <div class="muted">${q.area} • ${q.content}</div>
-        <p><b>Q${q.id}.</b> ${q.text}</p>
-        <div>Sua resposta: <b>${q.chosen || '-'}</b></div>
-        <div>Resposta correta: <b>${q.correct}</b></div>
-      </div>
-    `).join('');
-    box.insertAdjacentHTML('beforeend', `<h4>Questões</h4>${htmlQuestoes}`);
-  }
+// mostra também a lista de questões abaixo do gráfico
+const box = $('#resultado-conteudos');
+if(box){
+  box.innerHTML = ''; // limpa antes
+  const htmlQuestoes = (data.perQuestion||[]).map(q=>`
+    <div class="qcard ${q.hit ? 'hit':'miss'}">
+      <div class="muted">${q.area} • ${q.content}</div>
+      <p><b>Q${q.id}.</b> ${q.text}</p>
+      <div>Sua resposta: <b>${q.chosen || '-'}</b></div>
+      <div>Resposta correta: <b>${q.correct}</b></div>
+    </div>
+  `).join('');
+  box.insertAdjacentHTML('beforeend', `<h4>Questões</h4>${htmlQuestoes}`);
 }
 
 /*************** CLASSES ***************/
@@ -637,4 +640,5 @@ async function openAlunoDetalhe(studentId, studentName){
     try{ await fetchSimulados(); }catch{}
   }
 })();
+
 
