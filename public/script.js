@@ -369,11 +369,6 @@ function renderTelaConteudos(area){
 }
 
 /*************** PROGRESSO ***************/
-async function openProgresso(){
-  const view = $('#view-progresso');
-  switchToTab(view, 'historico');
-  await renderHistorico();
-}
 async function renderHistorico(){
   const wrap = $('#historicoList');
   if(!wrap) return;
@@ -382,7 +377,11 @@ async function renderHistorico(){
     const r = await fetch('/me/history', { headers: authHeaders() });
     const arr = await r.json();
     if(!r.ok) throw new Error(arr.error || 'Falha ao obter histórico');
-    if(!arr.length){ wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`; return; }
+    if(!arr.length){ 
+      wrap.innerHTML = `<div class="card"><b>Nenhum simulado realizado ainda.</b></div>`; 
+      return; 
+    }
+
     wrap.innerHTML = arr.map(a=>{
       const statusDot = a.score>=75 ? 'done' : 'pending';
       const simTitle = (SIMULADOS_CACHE.find(s=>String(s.id)===String(a.simuladoId))?.name) || `Simulado ${a.simuladoId}`;
@@ -394,28 +393,53 @@ async function renderHistorico(){
             <span class="muted">• ${formatDate(a.date)}</span>
           </div>
           <div class="sim-row__right">
-            <button class="btn small" onclick="abrirDetalheHistorico('${a.id}')">Ver Detalhes</button>
+            <span class="badge">${a.correct}/${a.total} acertos</span>
+            <button class="btn small" data-detail="${a.id}">Ver Detalhes</button>
           </div>
         </div>
       `;
     }).join('');
+
+    // evento para abrir detalhes
+    wrap.querySelectorAll('button[data-detail]').forEach(btn=>{
+      btn.addEventListener('click', ()=> openDetalheHistorico(btn.dataset.detail));
+    });
+
   }catch(err){
     wrap.innerHTML = `<div class="form-error">${err.message || 'Erro ao carregar histórico'}</div>`;
   }
 }
-async function abrirDetalheHistorico(attemptId){
-  const r = await fetch('/me/history', { headers: authHeaders() });
-  const arr = await r.json();
-  const attempt = arr.find(a => a.id === attemptId);
-  if(!attempt){ alert('Tentativa não encontrada'); return; }
 
-  RESULT = { score: Math.round(attempt.score) };
-  BY_AREA = attempt.byArea || [];
-  BY_CONTENT = attempt.byContent || [];
-  PER_QUESTIONS = attempt.perQuestion || [];
-  CONTENT_AREA = {}; PER_QUESTIONS.forEach(q => CONTENT_AREA[q.content]=q.area);
+async function openDetalheHistorico(attemptId){
+  const r = await fetch(`/attempt/${attemptId}`, { headers: authHeaders() });
+  const data = await r.json();
+  if(!r.ok){ alert(data.error || 'Erro ao carregar detalhes'); return; }
 
+  RESULT = { score: Math.round(data.score) };
+  BY_AREA = data.byArea || [];
+  BY_CONTENT = data.byContent || [];
+  CONTENT_AREA = {};
+  (data.perQuestion || []).forEach(q => CONTENT_AREA[q.content] = q.area);
+
+  // guarda questões e respostas para renderizar lista
+  CURRENT_QUESTIONS = data.perQuestion || [];
+
+  // renderiza a mesma tela de resultado que aparece após o simulado
   renderTelaGeral();
+
+  // mostra também a lista de questões abaixo do gráfico
+  const box = $('#resultado-conteudos');
+  if(box){
+    const htmlQuestoes = (data.perQuestion||[]).map(q=>`
+      <div class="qcard ${q.hit ? 'hit':'miss'}">
+        <div class="muted">${q.area} • ${q.content}</div>
+        <p><b>Q${q.id}.</b> ${q.text}</p>
+        <div>Sua resposta: <b>${q.chosen || '-'}</b></div>
+        <div>Resposta correta: <b>${q.correct}</b></div>
+      </div>
+    `).join('');
+    box.insertAdjacentHTML('beforeend', `<h4>Questões</h4>${htmlQuestoes}`);
+  }
 }
 
 /*************** CLASSES ***************/
@@ -613,3 +637,4 @@ async function openAlunoDetalhe(studentId, studentName){
     try{ await fetchSimulados(); }catch{}
   }
 })();
+
