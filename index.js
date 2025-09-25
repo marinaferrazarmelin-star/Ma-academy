@@ -219,6 +219,14 @@ app.get("/me/history", auth, (req, res) => {
   res.json(attempts.sort((a, b) => new Date(b.date) - new Date(a.date)));
 });
 
+// detalhes de um attempt específico
+app.get("/attempt/:id", auth, (req,res)=>{
+  const attempts = read(ATTEMPTS_PATH);
+  const att = attempts.find(a => a.id === req.params.id && a.userId === req.user.id);
+  if(!att) return res.status(404).json({ error:"attempt not found" });
+  res.json(att);
+});
+
 // -------------- PROFESSOR / TURMA --------------
 function mustTeacher(req, res, next) {
   if (req.user.role !== "teacher")
