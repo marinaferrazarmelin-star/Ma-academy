@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ENEM PDF → QuestionBank</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  </head>
+  <body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+      <div class="container-fluid">
+        <span class="navbar-brand">QuestionBank Builder</span>
+      </div>
+    </nav>
+
+    <main class="container pb-5">
+      <section class="card shadow-sm mb-4">
+        <div class="card-body">
+          <h1 class="card-title h3 mb-3">Digitalize provas ENEM para JSON</h1>
+          <p class="text-muted">
+            Faça upload de um PDF e o sistema extrai automaticamente enunciados, alternativas e imagens, gerando um arquivo <code>QuestionBank.json</code> pronto para uso.
+          </p>
+          <form id="upload-form" class="row gy-2 align-items-end" enctype="multipart/form-data">
+            <div class="col-md-4">
+              <label for="examName" class="form-label">Código da prova (ex: ENEM24_F1)</label>
+              <input type="text" class="form-control" id="examName" name="exam_name" placeholder="ENEM24_F1" />
+            </div>
+            <div class="col-md-4">
+              <label for="pdf" class="form-label">Arquivo PDF</label>
+              <input class="form-control" type="file" id="pdf" name="pdf" accept="application/pdf" required />
+            </div>
+            <div class="col-md-4 d-grid">
+              <button type="submit" class="btn btn-primary">Enviar e processar</button>
+            </div>
+          </form>
+
+          <div class="progress mt-4" role="progressbar" aria-label="Progresso do processamento" aria-valuemin="0" aria-valuemax="100">
+            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+          </div>
+
+          <div id="status" class="alert alert-info mt-3 d-none"></div>
+          <div class="mt-3">
+            <a id="download-link" class="btn btn-outline-success d-none" href="#" download>Baixar QuestionBank.json</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h4 mb-3">Pré-visualização das questões extraídas</h2>
+          <div id="questions-container" class="row gy-3">
+            {% if questions %}
+              {% for question in questions %}
+                <div class="col-12">
+                  <article class="question-card">
+                    <header class="d-flex justify-content-between align-items-start mb-2">
+                      <div>
+                        <h3 class="h5 mb-1">{{ question.id }}</h3>
+                        <span class="badge bg-secondary">{{ question['matéria'] }}</span>
+                      </div>
+                    </header>
+                    {% if question.texto %}
+                      <p class="question-text">{{ question.texto | nl2br }}</p>
+                    {% endif %}
+                    {% if question.enunciado %}
+                      <p class="question-enunciado">{{ question.enunciado | nl2br }}</p>
+                    {% endif %}
+                    {% if question.alternativas %}
+                      <ul class="list-group mb-2">
+                        {% for alternativa in question.alternativas %}
+                          <li class="list-group-item">{{ alternativa }}</li>
+                        {% endfor %}
+                      </ul>
+                    {% endif %}
+                    {% if question.imagens %}
+                      <div class="question-images">
+                        {% for imagem in question.imagens %}
+                          <img src="{{ url_for('static', filename=imagem) }}" class="img-fluid rounded shadow-sm" alt="Imagem da questão {{ question.id }}" />
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                  </article>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-muted">Ainda não há questões processadas. Faça upload de um PDF para começar.</p>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById('upload-form');
+      const progressBar = document.getElementById('progress-bar');
+      const statusBox = document.getElementById('status');
+      const questionsContainer = document.getElementById('questions-container');
+      const downloadLink = document.getElementById('download-link');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const formData = new FormData(form);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload');
+
+        xhr.upload.addEventListener('progress', (progressEvent) => {
+          if (progressEvent.lengthComputable) {
+            const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+            progressBar.style.width = `${percent}%`;
+            progressBar.setAttribute('aria-valuenow', percent);
+          } else {
+            progressBar.style.width = '50%';
+          }
+        });
+
+        xhr.addEventListener('loadstart', () => {
+          progressBar.style.width = '10%';
+          progressBar.setAttribute('aria-valuenow', 10);
+          statusBox.classList.add('alert-info');
+          statusBox.classList.remove('d-none', 'alert-danger', 'alert-success');
+          statusBox.textContent = 'Processando o PDF. Isso pode levar alguns minutos…';
+        });
+
+        xhr.addEventListener('load', () => {
+          progressBar.style.width = '100%';
+          progressBar.setAttribute('aria-valuenow', 100);
+        });
+
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState === XMLHttpRequest.DONE) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              if (xhr.status >= 200 && xhr.status < 300) {
+                statusBox.textContent = response.message;
+                statusBox.classList.remove('alert-info', 'alert-danger');
+                statusBox.classList.add('alert-success');
+                updateQuestions(response.questions);
+                if (response.downloadUrl) {
+                  downloadLink.href = response.downloadUrl;
+                  downloadLink.classList.remove('d-none');
+                }
+              } else {
+                statusBox.textContent = response.error || 'Erro ao processar o PDF.';
+                statusBox.classList.remove('alert-info', 'alert-success');
+                statusBox.classList.add('alert-danger');
+              }
+            } catch (error) {
+              statusBox.textContent = 'Ocorreu um erro inesperado. Verifique os logs do servidor.';
+              statusBox.classList.remove('alert-info', 'alert-success');
+              statusBox.classList.add('alert-danger');
+            }
+          }
+        };
+
+        xhr.send(formData);
+      });
+
+      function updateQuestions(questions = []) {
+        if (!Array.isArray(questions) || questions.length === 0) {
+          questionsContainer.innerHTML = '<p class="text-muted">Nenhuma questão encontrada para este PDF.</p>';
+          return;
+        }
+
+        questionsContainer.innerHTML = '';
+        questions.forEach((question) => {
+          const article = document.createElement('article');
+          article.classList.add('question-card');
+          const subject = question['matéria'] || question.materia || 'Inglês';
+          article.innerHTML = `
+            <header class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <h3 class="h5 mb-1">${question.id}</h3>
+                <span class="badge bg-secondary">${subject}</span>
+              </div>
+            </header>
+            ${question.texto ? `<p class="question-text">${formatText(question.texto)}</p>` : ''}
+            ${question.enunciado ? `<p class="question-enunciado">${formatText(question.enunciado)}</p>` : ''}
+            ${renderAlternatives(question.alternativas)}
+            ${renderImages(question.imagens)}
+          `;
+          const wrapper = document.createElement('div');
+          wrapper.classList.add('col-12');
+          wrapper.appendChild(article);
+          questionsContainer.appendChild(wrapper);
+        });
+      }
+
+      function renderAlternatives(alternatives = []) {
+        if (!alternatives || alternatives.length === 0) {
+          return '';
+        }
+        const items = alternatives
+          .map((alt) => `<li class="list-group-item">${alt}</li>`)
+          .join('');
+        return `<ul class="list-group mb-2">${items}</ul>`;
+      }
+
+      function renderImages(images = []) {
+        if (!images || images.length === 0) {
+          return '';
+        }
+        const items = images
+          .map((path) => {
+            if (path.startsWith('http')) {
+              return `<img src="${path}" class="img-fluid rounded shadow-sm me-2 mb-2" alt="Imagem da questão" />`;
+            }
+            const normalized = path.startsWith('/') ? path.slice(1) : path;
+            return `<img src="/static/${normalized}" class="img-fluid rounded shadow-sm me-2 mb-2" alt="Imagem da questão" />`;
+          })
+          .join('');
+        return `<div class="question-images">${items}</div>`;
+      }
+
+      function formatText(text) {
+        return text
+          .split('\n')
+          .map((line) => `<span>${line}</span>`)
+          .join('<br />');
+      }
+    </script>
+  </body>
+</html>

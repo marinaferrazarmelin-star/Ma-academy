@@ -1,0 +1,34 @@
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.question-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 10px 25px rgba(16, 24, 40, 0.08);
+}
+
+.question-card + .question-card {
+  margin-top: 1.5rem;
+}
+
+.question-text,
+.question-enunciado {
+  white-space: pre-line;
+}
+
+.question-images img {
+  max-height: 320px;
+}
+
+.progress {
+  height: 0.9rem;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+#status {
+  transition: all 0.3s ease-in-out;
+}
