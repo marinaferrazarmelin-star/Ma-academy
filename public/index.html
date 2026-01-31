@@ -68,9 +68,69 @@
     </section>
 
     <!-- BANCO -->
-    <section id="view-banco" class="view">
-      <div class="container"><h2>Banco de Questões</h2><p class="muted">Em breve.</p></div>
-    </section>
+<section id="view-banco" class="view">
+  <div class="container">
+    <div class="row between" style="gap:12px; align-items:center;">
+      <h2>Banco de Questões</h2>
+      <button class="btn small ghost" id="btnBancoReload" type="button">↻ Atualizar</button>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card" style="padding:14px; margin-top:12px;">
+      <div class="row" style="gap:12px; flex-wrap:wrap; align-items:flex-end;">
+        <label style="min-width:180px;">
+          Simulado:
+          <select id="bancoSimSelect">
+            <option value="1">Simulado 1</option>
+            <option value="all">Todos</option>
+          </select>
+        </label>
+
+        <label style="min-width:220px;">
+          Área:
+          <select id="bancoAreaSelect">
+            <option value="">Todas</option>
+          </select>
+        </label>
+
+        <label style="min-width:220px;">
+          Tema (conteúdo):
+          <select id="bancoThemeSelect">
+            <option value="">Todos</option>
+          </select>
+        </label>
+
+        <label style="min-width:260px; flex:1;">
+          Buscar no enunciado:
+          <input id="bancoSearch" type="text" placeholder="ex: pitágoras, gráfico, crase..." />
+        </label>
+
+        <div class="row end" style="gap:10px;">
+          <button class="btn small" id="btnBancoApply" type="button">Aplicar</button>
+          <button class="btn small ghost" id="btnBancoClear" type="button">Limpar</button>
+        </div>
+      </div>
+
+      <p class="muted" style="margin-top:10px;">
+        * “Tema” corresponde ao campo <code>content</code> das questões (como está no seu backend hoje).
+      </p>
+    </div>
+
+    <!-- Meta + Paginação -->
+    <div class="row between" style="margin-top:12px; align-items:center;">
+      <div class="muted" id="bancoMeta">—</div>
+
+      <div class="row" style="gap:8px; align-items:center;">
+        <button class="btn small ghost" id="bancoPrev" type="button">←</button>
+        <span class="muted" id="bancoPageLabel">Página 1</span>
+        <button class="btn small ghost" id="bancoNext" type="button">→</button>
+      </div>
+    </div>
+
+    <!-- Lista -->
+    <div id="bancoList" class="list" style="margin-top:10px;"></div>
+  </div>
+</section>
 
    <!-- PROGRESSO -->
 <section id="view-progresso" class="view">
@@ -213,4 +273,5 @@
   <script src="/script.js"></script>
 </body>
 </html>
+
 
