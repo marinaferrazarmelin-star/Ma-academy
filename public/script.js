@@ -14,6 +14,15 @@ let CONTENT_AREA = {};           // {content: area}
 
 const charts = { geral:null, subjects:{}, conteudos:null };
 
+/*************** BANCO (NOVO) ***************/
+const BANCO = {
+  bound: false,
+  page: 1,
+  pageSize: 20,
+  total: 0,
+  lastSim: "1"
+};
+
 /*************** UTILS ***************/
 const $ = (sel)=> document.querySelector(sel);
 const $$ = (sel)=> document.querySelectorAll(sel);
@@ -28,7 +37,9 @@ function destroyAll(){
   if (charts.conteudos){ charts.conteudos.destroy(); charts.conteudos=null; }
 }
 function authHeaders(){
-  return TOKEN ? { 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json' } : { 'Content-Type':'application/json' };
+  return TOKEN
+    ? { 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json' }
+    : { 'Content-Type':'application/json' };
 }
 function formatDate(iso){
   try{
@@ -56,6 +67,7 @@ $$('#navLinks a').forEach(a=>{
       $$('#navLinks a').forEach(x => x.classList.toggle('active', x===a));
       setView(route);
       if(route==='simulados'){ renderListaSimulados(); }
+      if(route==='banco'){ openBanco(); }            // ✅ NOVO
       if(route==='progresso'){ openProgresso(); }
       if(route==='classes'){ openClasses(); }
     }
@@ -400,6 +412,203 @@ function renderTelaConteudos(area){
   $('#btnBackMaterias').onclick = renderTelaMaterias;
 }
 
+/*************** BANCO DE QUESTÕES (NOVO) ***************/
+function bancoEls(){
+  return {
+    sim: $('#bancoSimSelect'),
+    area: $('#bancoAreaSelect'),
+    theme: $('#bancoThemeSelect'),
+    search: $('#bancoSearch'),
+    btnApply: $('#btnBancoApply'),
+    btnClear: $('#btnBancoClear'),
+    btnReload: $('#btnBancoReload'),
+    prev: $('#bancoPrev'),
+    next: $('#bancoNext'),
+    meta: $('#bancoMeta'),
+    pageLabel: $('#bancoPageLabel'),
+    list: $('#bancoList'),
+  };
+}
+
+function uniqSorted(arr){
+  return [...new Set(arr.filter(Boolean))].sort((a,b)=> String(a).localeCompare(String(b)));
+}
+
+function bancoBuildUrl(){
+  const el = bancoEls();
+  const params = new URLSearchParams();
+  params.set('simulado', el.sim?.value || '1');
+  params.set('page', String(BANCO.page));
+  params.set('pageSize', String(BANCO.pageSize));
+
+  if(el.area?.value) params.set('area', el.area.value);
+  if(el.theme?.value) params.set('theme', el.theme.value);
+  if(el.search?.value?.trim()) params.set('search', el.search.value.trim());
+
+  return `/questions?${params.toString()}`;
+}
+
+async function bancoFetchJson(url){
+  const r = await fetch(url, { headers: authHeaders() });
+  const data = await r.json().catch(()=> ({}));
+  if(!r.ok) throw new Error(data.error || 'Falha ao carregar banco');
+  return data;
+}
+
+function bancoUpdateMeta(){
+  const el = bancoEls();
+  if(el.meta) el.meta.textContent = `${BANCO.total} questões • ${BANCO.pageSize}/página`;
+  if(el.pageLabel) el.pageLabel.textContent = `Página ${BANCO.page}`;
+}
+
+function bancoRender(items){
+  const el = bancoEls();
+  if(!el.list) return;
+
+  if(!items || !items.length){
+    el.list.innerHTML = `<div class="card"><p class="muted">Nenhuma questão encontrada.</p></div>`;
+    return;
+  }
+
+  el.list.innerHTML = items.map(q=>{
+    const sim = q.simuladoId ? `Simulado ${q.simuladoId}` : '';
+    const area = q.area || '—';
+    const theme = q.content || '—';
+    const id = (q.id ?? '—');
+
+    const optionsHtml = Array.isArray(q.options)
+      ? `<ol style="margin-top:10px;">${q.options.map(opt=>`<li style="margin:4px 0;">${opt}</li>`).join('')}</ol>`
+      : '';
+
+    return `
+      <div class="card" style="margin-bottom:10px;">
+        <div class="row between" style="gap:10px; align-items:flex-start;">
+          <div>
+            <div class="muted" style="font-size:12px;">${sim}</div>
+            <h3 style="margin:6px 0 0 0; font-size:16px;">${area} • ${theme}</h3>
+          </div>
+          <div class="muted" style="font-size:12px;">ID: ${id}</div>
+        </div>
+
+        <p style="margin-top:10px; white-space:pre-wrap;"><b>Q${id}.</b> ${q.text ?? ''}</p>
+        ${optionsHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+async function bancoRefreshFacets(){
+  const el = bancoEls();
+  if(!el.sim) return;
+
+  const simVal = el.sim.value || '1';
+  BANCO.lastSim = simVal;
+
+  // snapshot para extrair áreas e temas
+  const params = new URLSearchParams();
+  params.set('simulado', simVal);
+  params.set('page', '1');
+  params.set('pageSize', '200');
+
+  const data = await bancoFetchJson(`/questions?${params.toString()}`);
+  const items = data.items || [];
+
+  const areas = uniqSorted(items.map(q=>q.area));
+  const themes = uniqSorted(items.map(q=>q.content));
+
+  const prevArea = el.area?.value || '';
+  const prevTheme = el.theme?.value || '';
+
+  if(el.area){
+    el.area.innerHTML = `<option value="">Todas</option>` + areas.map(a=>`<option value="${a}">${a}</option>`).join('');
+    if(prevArea && areas.includes(prevArea)) el.area.value = prevArea;
+  }
+  if(el.theme){
+    el.theme.innerHTML = `<option value="">Todos</option>` + themes.map(t=>`<option value="${t}">${t}</option>`).join('');
+    if(prevTheme && themes.includes(prevTheme)) el.theme.value = prevTheme;
+  }
+}
+
+async function bancoLoad(){
+  bancoUpdateMeta();
+  const data = await bancoFetchJson(bancoBuildUrl());
+  BANCO.total = data.total || 0;
+  bancoUpdateMeta();
+  bancoRender(data.items || []);
+}
+
+function bancoClear(){
+  const el = bancoEls();
+  if(el.area) el.area.value = '';
+  if(el.theme) el.theme.value = '';
+  if(el.search) el.search.value = '';
+  BANCO.page = 1;
+}
+
+function openBanco(){
+  const el = bancoEls();
+  if(!el.sim || !el.list) return;
+
+  if(!BANCO.bound){
+    BANCO.bound = true;
+
+    el.sim.addEventListener('change', async ()=>{
+      BANCO.page = 1;
+      try{
+        await bancoRefreshFacets();
+        await bancoLoad();
+      }catch(e){
+        el.list.innerHTML = `<div class="form-error">${e.message}</div>`;
+      }
+    });
+
+    el.btnApply?.addEventListener('click', async ()=>{
+      BANCO.page = 1;
+      try{ await bancoLoad(); }catch(e){ el.list.innerHTML = `<div class="form-error">${e.message}</div>`; }
+    });
+
+    el.btnClear?.addEventListener('click', async ()=>{
+      bancoClear();
+      try{ await bancoLoad(); }catch(e){ el.list.innerHTML = `<div class="form-error">${e.message}</div>`; }
+    });
+
+    el.btnReload?.addEventListener('click', async ()=>{
+      try{
+        await bancoRefreshFacets();
+        await bancoLoad();
+      }catch(e){
+        el.list.innerHTML = `<div class="form-error">${e.message}</div>`;
+      }
+    });
+
+    el.prev?.addEventListener('click', async ()=>{
+      if(BANCO.page > 1){
+        BANCO.page--;
+        try{ await bancoLoad(); }catch(e){ el.list.innerHTML = `<div class="form-error">${e.message}</div>`; }
+      }
+    });
+
+    el.next?.addEventListener('click', async ()=>{
+      const maxPage = Math.max(1, Math.ceil((BANCO.total || 0) / BANCO.pageSize));
+      if(BANCO.page < maxPage){
+        BANCO.page++;
+        try{ await bancoLoad(); }catch(e){ el.list.innerHTML = `<div class="form-error">${e.message}</div>`; }
+      }
+    });
+  }
+
+  // primeira carga (ou recarga ao entrar)
+  (async ()=>{
+    try{
+      BANCO.page = 1;
+      await bancoRefreshFacets();
+      await bancoLoad();
+    }catch(e){
+      el.list.innerHTML = `<div class="form-error">${e.message}</div>`;
+    }
+  })();
+}
+
 /*************** PROGRESSO ***************/
 async function openProgresso(){
   const view = $('#view-progresso');
@@ -472,7 +681,6 @@ async function openDetalheHistorico(attemptId){
   // renderiza o mesmo fluxo de telas
   setView('simulados');            // garante que as seções de resultado estão visíveis nessa view
   renderTelaGeral();               // começa em "Geral"
-  // quando o usuário avançar para "Por Conteúdo" verá também a lista de questões já populada
 }
 
 /*************** CLASSES ***************/
