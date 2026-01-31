@@ -45,6 +45,153 @@ function write(file, data) {
 // carrega questões (em memória)
 let QUESTIONS = read(QUESTIONS_PATH);
 
+// ======================
+// FILTRO DE QUESTÕES (NOVO)
+// ======================
+
+function parseListParam(value) {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    return value
+      .flatMap(v => String(v).split(","))
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+  return String(value)
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function matchesAllTags(questionTags, requiredTags) {
+  if (!requiredTags || requiredTags.length === 0) return true;
+  const set = new Set(questionTags || []);
+  return requiredTags.every(t => set.has(t));
+}
+
+function normalize(v) {
+  return (v ?? "").toString().trim();
+}
+
+/**
+ * IMPORTANTÍSSIMO:
+ * Seu modelo atual de questão tem (pelo que aparece no /simulado/:id e /submit):
+ * - area
+ * - content
+ * - text
+ * - options
+ * - answer
+ *
+ * Então o filtro usa estes campos:
+ * - area => area
+ * - theme => content  (aqui estou mapeando theme -> content)
+ * - subtheme => subtheme (se você ainda não tem, pode adicionar depois)
+ * - examType => examType (se você ainda não tem, pode adicionar depois)
+ * - difficulty => difficulty (se você ainda não tem, pode adicionar depois)
+ * - tags => tags (se você ainda não tem, pode adicionar depois)
+ * - search => procura em text
+ * - year => year (se você ainda não tem, pode adicionar depois)
+ */
+function filterQuestionsArray(allQuestions, query) {
+  const examTypes = parseListParam(query.examType);
+  const areas = parseListParam(query.area);
+  const themes = parseListParam(query.theme);        // mapeado para q.content
+  const subthemes = parseListParam(query.subtheme);
+  const difficulties = parseListParam(query.difficulty);
+  const tags = parseListParam(query.tags);
+
+  const yearMin = query.yearMin ? Number(query.yearMin) : null;
+  const yearMax = query.yearMax ? Number(query.yearMax) : null;
+
+  const search = query.search ? normalize(query.search).toLowerCase() : null;
+
+  return allQuestions.filter(q => {
+    const examType = normalize(q.examType);
+    const area = normalize(q.area);
+
+    // theme -> content (porque hoje seu campo é "content")
+    const theme = normalize(q.content);
+
+    // subtheme (caso exista no JSON)
+    const subtheme = normalize(q.subtheme);
+
+    const difficulty = normalize(q.difficulty);
+    const year = q.year != null ? Number(q.year) : null;
+
+    if (examTypes && !examTypes.includes(examType)) return false;
+    if (areas && !areas.includes(area)) return false;
+    if (themes && !themes.includes(theme)) return false;
+    if (subthemes && !subthemes.includes(subtheme)) return false;
+    if (difficulties && !difficulties.includes(difficulty)) return false;
+
+    if (yearMin !== null && year !== null && year < yearMin) return false;
+    if (yearMax !== null && year !== null && year > yearMax) return false;
+
+    if (!matchesAllTags(q.tags, tags)) return false;
+
+    if (search) {
+      const hay = `${q.text || ""}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Junta questões de um simulado específico ou de todos.
+ * query.simulado:
+ *  - "1" (default) => só simulado 1
+ *  - "all" => todos os simulados
+ */
+function getQuestionsScope(query) {
+  const simulado = query.simulado ? String(query.simulado) : "1";
+
+  if (simulado === "all") {
+    // flatten de todos os arrays
+    const all = [];
+    Object.keys(QUESTIONS || {}).forEach(k => {
+      const arr = QUESTIONS[k] || [];
+      arr.forEach(q => all.push({ ...q, simuladoId: String(k) }));
+    });
+    return all;
+  }
+
+  const arr = (QUESTIONS && QUESTIONS[simulado]) ? QUESTIONS[simulado] : [];
+  return arr.map(q => ({ ...q, simuladoId: String(simulado) }));
+}
+
+// ======================
+// NOVA ROTA: GET /questions (NOVO)
+// ======================
+// Exemplos:
+// /questions?simulado=1
+// /questions?simulado=all&area=Matematica
+// /questions?theme=Geometria (na prática filtra por content)
+// /questions?search=pitagoras
+// /questions?page=2&pageSize=20
+app.get("/questions", auth, (req, res) => {
+  const scope = getQuestionsScope(req.query);
+  const filtered = filterQuestionsArray(scope, req.query);
+
+  const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
+  const pageSize = req.query.pageSize ? Math.min(200, Math.max(1, Number(req.query.pageSize))) : 30;
+
+  const start = (page - 1) * pageSize;
+  const items = filtered.slice(start, start + pageSize);
+
+  // "safe" = remove answer se você não quiser entregar gabarito aqui.
+  // Se quiser esconder, descomenta e usa safeItems
+  // const safeItems = items.map(({ answer, ...rest }) => rest);
+
+  res.json({
+    total: filtered.length,
+    page,
+    pageSize,
+    items
+  });
+});
+
 // -------------- AUTH --------------
 function signToken(user) {
   return jwt.sign(
